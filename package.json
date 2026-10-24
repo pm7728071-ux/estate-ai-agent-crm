@@ -1,0 +1,9 @@
+{
+  "name": "estate-ai-agent-crm",
+  "version": "1.0.0",
+  "description": "Autonomous real estate AI agent CRM — Live Inboxes, Agent Memory Bank, System Action Logs",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "express": "^4.19.2" }
+}
