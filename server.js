@@ -23,11 +23,14 @@ const seed = {
     { id: 'log-003', ts: new Date(Date.now() - 19 * 3600000).toISOString(), severity: 'APPROVAL', message: 'Quarterly payment request from Amina H. escalated to operator — no commitment sent.' },
   ],
 };
-let DB;
-try { DB = JSON.parse(fs.readFileSync('./data.json', 'utf8')); } catch { DB = JSON.parse(JSON.stringify(seed)); }
-const save = () => { try { fs.writeFileSync('./data.json', JSON.stringify(DB, null, 2)); } catch {} };
+const { createStore } = require('./store.js');
+const store = createStore(seed);
+let DB = null;
+const save = () => store.save();
 const log = (severity, message) => { DB.logs.unshift({ id: 'log-' + Date.now() + '-' + Math.floor(Math.random() * 999), ts: new Date().toISOString(), severity, message }); save(); };
-require('./agent.js')({ app, DB, save, log });
+
+// Mount the agent loop before routes below; lazy DB getter means storage init can fill DB later.
+require('./agent.js')({ app, getDB: () => DB, save, log });
 
 // ---------- simple rate limiting ----------
 const hits = new Map();
@@ -35,7 +38,7 @@ const limited = (ip) => { const now = Date.now(); const a = (hits.get(ip) || [])
 app.use((req, res, next) => { if (req.path !== '/health' && limited(req.ip || 'x')) return res.status(429).json({ error: 'Too many requests' }); next(); });
 
 // ---------- API ----------
-app.get('/health', (req, res) => res.json({ ok: true, service: 'estate-ai-agent-crm', time: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ ok: true, service: 'estate-ai-agent-crm', storage: store.name(), time: new Date().toISOString() }));
 
 app.get('/api/inboxes', (req, res) => res.json(DB.inboxes));
 app.post('/api/inboxes', (req, res) => {
@@ -68,5 +71,5 @@ app.post('/api/memories', (req, res) => {
 app.get('/api/logs', (req, res) => res.json(DB.logs.slice(0, 100)));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
-const server = app.listen(PORT, () => console.log(`Estate AI Agent CRM listening on ${PORT}`));
-process.on('SIGTERM', () => server.close(() => process.exit(0)));
+store.init().then(() => { DB = store.DB; const server = app.listen(PORT, () => console.log(`Estate AI Agent CRM listening on ${PORT}`));
+process.on('SIGTERM', () => server.close(() => process.exit(0))); });

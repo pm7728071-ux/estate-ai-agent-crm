@@ -1,7 +1,7 @@
 /** Estate AI Agent CRM — execution loop v1 (Days 15-30).
  *  Deterministic: understand -> memory check -> act -> verify -> approval gate.
  */
-module.exports = function mountAgent({ app, DB, save, log }) {
+module.exports = function mountAgent({ app, getDB, save, log }) {
   const reply = (res, body) => res.json(body);
   const props = [
     { name: 'Kilimani 2BR Apartment', rent: '45,000 KES', beds: 2, area: 'Kilimani' },
@@ -14,6 +14,7 @@ module.exports = function mountAgent({ app, DB, save, log }) {
   app.post('/api/agent/message', (req, res) => {
     const { channel, from, text } = req.body || {};
     if (!from || !text) return res.status(400).json({ error: 'from and text are required' });
+    const DB = getDB();
     const msg = String(text).slice(0, 600);
     const t = msg.toLowerCase();
     DB.threads = DB.threads || {}; DB.holds = DB.holds || {};

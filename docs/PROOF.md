@@ -8,6 +8,7 @@ Evidence record for the 60-day program. Every claim is reproducible.
 |---|---|---|
 | S1–S10 scenario suite | 1/10 | **10/10** (3 consecutive runs) |
 | Agent response latency | n/a (no agent) | 78–123 ms (5 turns, warm) |
+| Agent loop regression suite | 10/10 after storage refactor |
 | Memory conflicts resolved | 0 | 1/1 (45k → 55k/60k, logged) |
 | Approval gates | 0 | 1 (offer letter held, nothing sent) |
 | Landlord holds enforced | 0 | 1 (Karen villa blocked) |
@@ -29,8 +30,9 @@ node tests/scenarios.js https://estate-ai-agent-crm.onrender.com
 
 - Deterministic intent engine, not an LLM: handles the tracked scenarios, but unseen
   phrasings may fall to the generic reply.
-- Storage is a JSON file on Render's ephemeral disk: data resets on redeploy. A free
-  MongoDB Atlas cluster (already used on Aegis) is the planned fix.
+- Storage: a driver layer now uses MongoDB Atlas when `MONGODB_URI` is set (durable) and
+  falls back to the JSON file otherwise (resets on redeploy). Coverage for the fallback
+  path is tested in `tests/storage.test.js`; the Mongo path activates via one Render env var.
 - No WhatsApp channel yet: the agent answers via HTTP API. Real WhatsApp needs a
   provider account (Twilio/Meta), which is a user decision + possible cost.
 - Scenario suite is the fixed S1–S10 set: green there is necessary, not sufficient.
