@@ -38,7 +38,7 @@ const limited = (ip) => { const now = Date.now(); const a = (hits.get(ip) || [])
 app.use((req, res, next) => { if (req.path !== '/health' && limited(req.ip || 'x')) return res.status(429).json({ error: 'Too many requests' }); next(); });
 
 // ---------- API ----------
-app.get('/health', (req, res) => res.json({ ok: true, service: 'estate-ai-agent-crm', storage: store.name(), time: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ ok: true, service: 'estate-ai-agent-crm', storage: store.name(), ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }));
 
 app.get('/api/inboxes', (req, res) => res.json(DB.inboxes));
 app.post('/api/inboxes', (req, res) => {

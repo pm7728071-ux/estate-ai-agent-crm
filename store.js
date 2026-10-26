@@ -9,6 +9,7 @@ function createStore(seed) {
   let pending = false;
   let timer = null;
   let col = null;
+  let lastError = null;
 
   async function init() {
     if (process.env.MONGODB_URI) {
@@ -29,6 +30,12 @@ function createStore(seed) {
         return DB;
       } catch (e) {
         console.error('[storage] Mongo unavailable, falling back to JSON:', e.message);
+        const m = String(e.message || '');
+        lastError = /auth/i.test(m) ? 'auth_failed'
+          : /ENOTFOUND|dns/i.test(m) ? 'dns'
+          : /timed out|ETIMEDOUT|ServerSelection/i.test(m) ? 'timeout_or_unreachable'
+          : /allowlist|not allowed|IP/i.test(m) ? 'ip_not_allowlisted'
+          : 'other';
         col = null;
       }
     }
@@ -58,6 +65,7 @@ function createStore(seed) {
     save,
     get DB() { return DB; },
     name: () => driverName,
+    lastError: () => lastError,
   };
 }
 
