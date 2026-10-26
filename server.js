@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.use(express.json({ limit: '50kb' }));
+app.use(express.json({ limit: '50kb', verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.static('public'));
 
 // ---------- data layer (seed + JSON file persistence where available) ----------
@@ -31,6 +31,9 @@ const log = (severity, message) => { DB.logs.unshift({ id: 'log-' + Date.now() +
 
 // Mount the agent loop before routes below; lazy DB getter means storage init can fill DB later.
 require('./agent.js')({ app, getDB: () => DB, save, log });
+
+// WhatsApp Cloud API webhook (Meta) — mounts /webhook/whatsapp
+require('./whatsapp.js')({ app, log });
 
 // ---------- simple rate limiting ----------
 const hits = new Map();

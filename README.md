@@ -20,3 +20,20 @@ The repo includes a `render.yaml` blueprint. In Render: **New → Blueprint → 
 
 ## Roadmap
 Days 1–14 evaluation engine · 15–30 execution loop (understand → memory → act → verify → approval gate) · 31–45 prove improvement · 46–60 release evidence.
+
+## WhatsApp (Meta Cloud API)
+
+Webhook: `POST /webhook/whatsapp` (verification: `GET /webhook/whatsapp`).
+
+Set these in Render → Environment, then paste the webhook URL into the Meta app:
+
+| Variable | What it is |
+|---|---|
+| `WHATSAPP_VERIFY_TOKEN` | Any string you choose; enter the same value in Meta's webhook setup |
+| `WHATSAPP_TOKEN` | Meta permanent access token (System User) |
+| `WHATSAPP_PHONE_NUMBER_ID` | The phone number ID from Meta → WhatsApp → API Setup |
+| `WHATSAPP_APP_SECRET` | Optional; enables X-Hub-Signature-256 verification |
+
+Callback URL: `https://estate-ai-agent-crm.onrender.com/webhook/whatsapp`
+Subscribe to the **messages** field. Without the token vars the webhook still accepts
+messages and logs them; replies start flowing as soon as the tokens are set.
