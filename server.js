@@ -27,6 +27,7 @@ let DB;
 try { DB = JSON.parse(fs.readFileSync('./data.json', 'utf8')); } catch { DB = JSON.parse(JSON.stringify(seed)); }
 const save = () => { try { fs.writeFileSync('./data.json', JSON.stringify(DB, null, 2)); } catch {} };
 const log = (severity, message) => { DB.logs.unshift({ id: 'log-' + Date.now() + '-' + Math.floor(Math.random() * 999), ts: new Date().toISOString(), severity, message }); save(); };
+require('./agent.js')({ app, DB, save, log });
 
 // ---------- simple rate limiting ----------
 const hits = new Map();
