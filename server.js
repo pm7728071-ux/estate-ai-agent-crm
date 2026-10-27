@@ -74,6 +74,23 @@ app.post('/api/memories', (req, res) => {
   res.status(201).json(m);
 });
 
+// Guarded one-time cleanup: clears evaluation/test rows from the live database.
+// Requires ADMIN_RESET_TOKEN (set it in Render, run once, then remove it).
+const resetGuard = (req, res, next) => {
+  const expected = process.env.ADMIN_RESET_TOKEN;
+  if (!expected) return res.status(503).json({ error: 'ADMIN_RESET_TOKEN not configured' });
+  const given = req.get('x-admin-token') || req.query.token || '';
+  if (given !== expected) return res.status(403).json({ error: 'Forbidden' });
+  next();
+};
+app.post('/api/admin/reset', resetGuard, (req, res) => {
+  const cleared = { inboxes: DB.inboxes.length, memories: DB.memories.length, logs: DB.logs.length };
+  DB.inboxes = []; DB.memories = []; DB.logs = []; DB.threads = {}; DB.holds = {};
+  log('INFO', 'Workspace cleared for production use — evaluation rows removed.');
+  save();
+  res.json({ ok: true, cleared });
+});
+
 app.get('/api/logs', (req, res) => res.json(DB.logs.slice(0, 100)));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
