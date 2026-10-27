@@ -4,143 +4,335 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Estate AI Agent CRM</title>
-<meta name="description" content="Autonomous real estate AI agent dashboard — Live Inboxes, Agent Memory Bank, System Action Logs.">
+<meta name="description" content="Autonomous real estate AI agent — live inboxes, agent memory bank, and a complete system action log.">
 <style>
 :root{
-  --bg:#0d1117;--panel:#131a24;--panel2:#1a2332;--line:#223046;--ink:#e8edf5;--dim:#8a97ab;
-  --accent:#d4a943;--green:#3fb98c;--red:#e0685f;--blue:#5b9dd9;--radius:12px;
+  --bg:#0a0e14; --surface:#111721; --surface-2:#161e2b; --line:#1f2a3a; --line-soft:#182231;
+  --ink:#eef2f8; --ink-2:#b9c4d4; --dim:#7e8b9e; --accent:#c9a227; --accent-soft:#c9a2271f;
+  --green:#34c08a; --amber:#d8a13c; --red:#d86b62; --blue:#5a9fd4; --r:14px;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;min-height:100vh;display:flex}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh}
+::selection{background:var(--accent);color:#131313}
 a{color:inherit;text-decoration:none}
-.sidebar{width:230px;min-height:100vh;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;position:sticky;top:0}
-.brand{padding:22px 20px 18px;border-bottom:1px solid var(--line)}
-.brand .mark{display:inline-flex;width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#d4a943,#9a7420);align-items:center;justify-content:center;font-weight:800;color:#141414;font-size:15px;margin-bottom:10px}
-.brand h1{font-size:16px;letter-spacing:.2px}
-.brand p{font-size:11.5px;color:var(--dim);margin-top:2px;letter-spacing:.4px;text-transform:uppercase}
-nav{padding:14px 12px;display:flex;flex-direction:column;gap:4px;flex:1}
-nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;color:var(--dim);font-size:14px;font-weight:500;transition:.15s}
-nav a svg{width:17px;height:17px;flex:none}
-nav a:hover{color:var(--ink);background:var(--panel2)}
-nav a.active{color:var(--ink);background:var(--panel2);box-shadow:inset 2px 0 0 var(--accent)}
-.side-foot{padding:16px 20px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)}
-.side-foot .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:7px;box-shadow:0 0 6px var(--green)}
-main{flex:1;padding:34px 42px;max-width:1120px}
-.view{display:none}.view.on{display:block}
-.head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:22px;gap:14px;flex-wrap:wrap}
-.head h2{font-size:23px;font-weight:650;letter-spacing:.2px}
-.head p{color:var(--dim);font-size:13.5px;margin-top:3px}
-.stamp{font-size:12px;color:var(--dim);border:1px solid var(--line);padding:5px 12px;border-radius:999px;background:var(--panel)}
-.cards{display:flex;flex-direction:column;gap:12px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;transition:border-color .15s}
-.card:hover{border-color:#33445f}
-.card .top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap}
-.card .who{font-weight:600;font-size:15px}
-.card .prop{color:var(--dim);font-size:12.5px;margin-top:1px}
-.badge{font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;padding:3px 10px;border-radius:999px}
-.b-new{color:#e9c05a;background:#e9c05a1a;border:1px solid #e9c05a44}
-.b-responded{color:var(--green);background:#3fb98c14;border:1px solid #3fb98c44}
-.b-escalated{color:#e08a5f;background:#e08a5f14;border:1px solid #e08a5f44}
-.msg{color:#c3cddc;font-size:13.5px}
-.meta{color:var(--dim);font-size:12px;margin-top:9px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-button{background:var(--accent);color:#141414;border:0;border-radius:8px;padding:7px 15px;font-weight:650;font-size:13px;cursor:pointer}
-button:hover{filter:brightness(1.08)}
-button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line)}
-button.ghost:hover{color:var(--ink)}
-.chip{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
-.mem{display:flex;justify-content:space-between;gap:14px}
-.conf{font-size:12px;color:var(--dim);white-space:nowrap}
-.bar{height:4px;background:var(--line);border-radius:99px;margin-top:10px;overflow:hidden}
+
+/* ---------- sidebar ---------- */
+.sidebar{width:248px;flex:none;background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{padding:24px 22px 20px;border-bottom:1px solid var(--line-soft);display:flex;gap:12px;align-items:center}
+.mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(140deg,#e0bc43,#9c7a17);display:grid;place-items:center;font-weight:800;color:#101010;font-size:14px;letter-spacing:.3px;flex:none}
+.brand h1{font-size:14.5px;font-weight:650;letter-spacing:.2px;line-height:1.25}
+.brand p{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.9px;margin-top:2px}
+nav{padding:16px 12px;display:flex;flex-direction:column;gap:3px;flex:1}
+.nav-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--dim);padding:6px 12px 10px}
+nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;color:var(--ink-2);font-size:13.5px;font-weight:520;transition:background .14s,color .14s}
+nav a svg{width:16px;height:16px;opacity:.85;flex:none}
+nav a:hover{background:var(--surface-2);color:var(--ink)}
+nav a.active{background:var(--surface-2);color:var(--ink);box-shadow:inset 2px 0 0 var(--accent)}
+nav a .count{margin-left:auto;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.side-foot{padding:16px 20px;border-top:1px solid var(--line-soft);font-size:11.5px;color:var(--dim);display:flex;align-items:center;gap:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px #34c08a1f}
+
+/* ---------- main ---------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:64px;flex:none;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;gap:18px;padding:0 34px;background:rgba(10,14,20,.85);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+.topbar .crumb{font-size:13px;color:var(--dim)}
+.topbar .crumb b{color:var(--ink);font-weight:600}
+.topbar .spacer{flex:1}
+.pill{font-size:11.5px;color:var(--ink-2);border:1px solid var(--line);background:var(--surface);padding:6px 12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.pill .live{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.content{padding:32px 34px 56px;max-width:1180px;width:100%}
+.view{display:none}.view.on{display:block;animation:fade .18s ease}
+@keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+.head{margin-bottom:24px}
+.head h2{font-size:22px;font-weight:650;letter-spacing:-.2px}
+.head p{color:var(--dim);font-size:13.5px;margin-top:5px;max-width:60ch}
+
+/* stat tiles */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:26px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.stat .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--dim)}
+.stat .v{font-size:26px;font-weight:680;margin-top:8px;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.stat .s{font-size:11.5px;color:var(--dim);margin-top:2px}
+
+/* cards */
+.cards{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;transition:border-color .15s,background .15s}
+.card:hover{border-color:#2a3a4f}
+.row{display:flex;gap:14px;align-items:flex-start}
+.avatar{width:38px;height:38px;border-radius:10px;flex:none;display:grid;place-items:center;font-size:13px;font-weight:650;background:var(--accent-soft);color:var(--accent);border:1px solid #c9a22738}
+.who{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.prop{color:var(--dim);font-size:12.5px;margin-top:3px}
+.msg{color:var(--ink-2);font-size:13.5px;margin-top:10px}
+.meta{color:var(--dim);font-size:11.5px;margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.badge{font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;padding:3px 9px;border-radius:6px;border:1px solid transparent}
+.b-new{color:#e6c163;background:#e6c16314;border-color:#e6c1633d}
+.b-responded{color:var(--green);background:#34c08a12;border-color:#34c08a38}
+.b-escalated{color:#d99a68;background:#d99a6814;border-color:#d99a683d}
+.chip{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+
+/* memory */
+.mem{display:grid;grid-template-columns:1fr 132px;gap:18px;align-items:center}
+.conf{font-size:11.5px;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:3px;background:var(--line);border-radius:99px;margin-top:11px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
-.logline{display:flex;gap:14px;padding:11px 4px;border-bottom:1px solid #1b2536;font-size:13.5px;align-items:baseline}
+
+/* logs */
+.logwrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.logline{display:grid;grid-template-columns:150px 86px 1fr;gap:14px;padding:13px 20px;border-bottom:1px solid var(--line-soft);font-size:13px;align-items:baseline}
 .logline:last-child{border-bottom:0}
-.logline .t{color:var(--dim);font-size:11.5px;flex:none;width:120px;font-variant-numeric:tabular-nums}
-.sev{font-size:10.5px;font-weight:700;letter-spacing:.6px;flex:none;width:74px}
-.s-info{color:var(--blue)}.s-action{color:var(--green)}.s-approval{color:#e9c05a}.s-blocked{color:var(--red)}
-.logline .m{color:#c3cddc}
-form{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-input,textarea,select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 12px;font-size:13.5px;flex:1;min-width:120px}
-textarea{min-width:260px}
-input:focus,textarea:focus,select:focus{outline:1px solid var(--accent)}
-.empty{color:var(--dim);font-size:13.5px;padding:22px;text-align:center;border:1px dashed var(--line);border-radius:var(--radius)}
-@media(max-width:760px){body{flex-direction:column}.sidebar{width:100%;min-height:auto;position:static;flex-direction:row;align-items:center;gap:8px;padding:8px}main{padding:20px}nav{flex-direction:row;padding:0 8px}}
+.logline:hover{background:var(--surface-2)}
+.logline .t{color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sev{font-size:10px;font-weight:750;letter-spacing:.7px}
+.s-info{color:var(--blue)}.s-action{color:var(--green)}.s-approval{color:var(--amber)}.s-blocked,.s-flag{color:var(--red)}.s-viewing_confirmed{color:var(--accent)}.s-memory_updated{color:#a98bd6}.s-hold_added{color:var(--amber)}
+.logline .m{color:var(--ink-2);line-height:1.5}
+
+/* forms + buttons */
+button{font:inherit;background:var(--accent);color:#151515;border:0;border-radius:8px;padding:9px 16px;font-weight:650;font-size:13px;cursor:pointer;transition:filter .14s}
+button:hover{filter:brightness(1.08)}
+button:active{transform:translateY(1px)}
+button.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line);font-weight:540}
+button.ghost:hover{background:var(--surface-2);color:var(--ink);filter:none}
+form{display:flex;gap:9px;margin-top:16px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+input,textarea,select{font:inherit;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:10px 12px;font-size:13.5px;flex:1;min-width:130px;transition:border-color .14s}
+input::placeholder,textarea::placeholder{color:#5d6a7d}
+input:focus,textarea:focus,select:focus{outline:0;border-color:var(--accent)}
+textarea{min-width:100%;resize:vertical}
+.empty{color:var(--dim);font-size:13px;padding:34px;text-align:center;border:1px dashed var(--line);border-radius:var(--r);background:#0d131c}
+.empty b{display:block;color:var(--ink-2);font-weight:600;margin-bottom:4px}
+.err{color:var(--red);font-size:12px;margin-top:8px;display:none}
+
+@media(max-width:880px){
+  body{flex-direction:column}
+  .sidebar{width:100%;height:auto;position:static;flex-direction:row;align-items:center;gap:6px;padding:8px 10px;overflow-x:auto}
+  .brand{border:0;padding:6px 10px}.brand p,.brand h1{display:none}
+  nav{flex-direction:row;padding:0;gap:4px}nav a{padding:8px 10px;font-size:12.5px}nav a span.lbl{display:inline}
+  .nav-label,.side-foot{display:none}.topbar{padding:0 18px}.content{padding:20px 18px 44px}
+  .mem{grid-template-columns:1fr}.logline{grid-template-columns:1fr;gap:5px}
+}
 </style>
 </head>
 <body>
 <aside class="sidebar">
   <div class="brand">
     <div class="mark">EA</div>
-    <h1>Estate AI Agent CRM</h1>
-    <p>Autonomous Real Estate AI Agent</p>
+    <div>
+      <h1>Estate AI Agent</h1>
+      <p>Autonomous CRM</p>
+    </div>
   </div>
   <nav>
-    <a href="#inboxes" class="active" data-v="inboxes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Live Inboxes</a>
-    <a href="#memories" data-v="memories"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/><path d="M9 21h6"/></svg>Agent Memory Bank</a>
-    <a href="#logs" data-v="logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>System Action Logs</a>
+    <div class="nav-label">Workspace</div>
+    <a href="#inboxes" class="active" data-v="inboxes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <span class="lbl">Live Inboxes</span><span class="count" id="c-inbox"></span>
+    </a>
+    <a href="#memories" data-v="memories">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7z"/><path d="M9 21h6"/></svg>
+      <span class="lbl">Agent Memory</span><span class="count" id="c-mem"></span>
+    </a>
+    <a href="#logs" data-v="logs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+      <span class="lbl">Action Logs</span><span class="count" id="c-log"></span>
+    </a>
   </nav>
   <div class="side-foot"><span class="dot"></span>Agent online · Nairobi</div>
 </aside>
-<main>
-  <section id="view-inboxes" class="view on">
-    <div class="head"><div><h2>Live Inboxes</h2><p>Incoming client conversations the agent is handling.</p></div><span class="stamp" id="inbox-count"></span></div>
-    <div class="cards" id="inboxes"></div>
-    <form id="f-inbox"><input id="i-client" placeholder="Client name" required><input id="i-prop" placeholder="Property"><input id="i-subject" placeholder="Subject"><textarea id="i-msg" placeholder="Incoming message…" required></textarea><button>Log inquiry</button></form>
-  </section>
-  <section id="view-memories" class="view">
-    <div class="head"><div><h2>Agent Memory Bank</h2><p>Everything the agent has learned — searchable, correctable.</p></div><span class="stamp" id="mem-count"></span></div>
-    <div class="cards" id="memories"></div>
-    <form id="f-mem"><input id="m-type" list="mtypes" placeholder="Type" value="Client preference"><datalist id="mtypes"><option>Client preference</option><option>Property</option><option>Policy</option><option>Client</option></datalist><textarea id="m-entry" placeholder="What should the agent remember?" required></textarea><input id="m-conf" type="number" min="0" max="100" value="90" style="max-width:90px" title="Confidence %"><button>Record memory</button></form>
-  </section>
-  <section id="view-logs" class="view">
-    <div class="head"><div><h2>System Action Logs</h2><p>Every agent action — timestamped and attributable.</p></div><span class="stamp" id="log-count"></span></div>
-    <div class="card" id="logs" style="padding:6px 18px"></div>
-  </section>
-</main>
+
+<div class="main">
+  <header class="topbar">
+    <div class="crumb">Workspace / <b id="crumb">Live Inboxes</b></div>
+    <div class="spacer"></div>
+    <span class="pill"><span class="live"></span>Monitoring</span>
+    <span class="pill" id="clock"></span>
+  </header>
+
+  <div class="content">
+    <section id="view-inboxes" class="view on">
+      <div class="head">
+        <h2>Live Inboxes</h2>
+        <p>Every client conversation the agent is handling, with its current state.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Open</div><div class="v" id="s-open">—</div><div class="s">inquiries in flight</div></div>
+        <div class="stat"><div class="k">Awaiting reply</div><div class="v" id="s-new">—</div><div class="s">first response due</div></div>
+        <div class="stat"><div class="k">Escalated</div><div class="v" id="s-esc">—</div><div class="s">needs an operator</div></div>
+      </div>
+      <div class="cards" id="inboxes"></div>
+      <form id="f-inbox">
+        <input id="i-client" placeholder="Client name" required>
+        <input id="i-prop" placeholder="Property">
+        <input id="i-subject" placeholder="Subject">
+        <textarea id="i-msg" placeholder="Incoming message…" rows="2" required></textarea>
+        <div style="display:flex;gap:9px;align-items:center;width:100%">
+          <button type="submit">Log inquiry</button>
+          <span class="err" id="e-inbox"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="view-memories" class="view">
+      <div class="head">
+        <h2>Agent Memory Bank</h2>
+        <p>What the agent has learned about clients, properties and policies — searchable and correctable.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Entries</div><div class="v" id="s-mem">—</div><div class="s">stored memories</div></div>
+        <div class="stat"><div class="k">Avg confidence</div><div class="v" id="s-conf">—</div><div class="s">across the bank</div></div>
+      </div>
+      <div class="cards" id="memories"></div>
+      <form id="f-mem">
+        <input id="m-type" list="mtypes" placeholder="Type" value="Client preference">
+        <datalist id="mtypes"><option>Client preference</option><option>Property</option><option>Policy</option><option>Client</option><option>Landlord instruction</option></datalist>
+        <textarea id="m-entry" placeholder="What should the agent remember?" rows="2" required></textarea>
+        <div style="display:flex;gap:9px;align-items:center;width:100%">
+          <input id="m-conf" type="number" min="0" max="100" value="90" style="max-width:110px" title="Confidence %">
+          <button type="submit">Record memory</button>
+          <span class="err" id="e-mem"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="view-logs" class="view">
+      <div class="head">
+        <h2>System Action Logs</h2>
+        <p>Every agent action, timestamped and attributable — the audit trail behind the dashboard.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Events</div><div class="v" id="s-log">—</div><div class="s">recorded actions</div></div>
+        <div class="stat"><div class="k">Approvals held</div><div class="v" id="s-appr">—</div><div class="s">waiting on a human</div></div>
+      </div>
+      <div class="logwrap" id="logs"></div>
+    </section>
+  </div>
+</div>
+
 <script>
 const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const ago = (iso) => { const m = Math.floor((Date.now() - new Date(iso)) / 60000); if (m < 1) return 'just now'; if (m < 60) return m + ' min ago'; const h = Math.floor(m / 60); return h < 24 ? h + ' hr ago' : Math.floor(h / 24) + ' d ago'; };
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ago = (iso) => {
+  const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const h = Math.floor(m / 60); if (h < 24) return h + ' hr ago';
+  const d = Math.floor(h / 24); return d + ' d ago';
+};
+const initials = (name) => String(name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+const sevClass = (s) => 's-' + String(s || 'info').toLowerCase().replace(/[^a-z_]/g, '');
+
+async function jget(path) { const r = await fetch(path); if (!r.ok) throw new Error(path); return r.json(); }
 
 async function loadInboxes() {
-  const rows = await (await fetch('/api/inboxes')).json();
-  $('#inbox-count').textContent = rows.length + ' open';
-  $('#inboxes').innerHTML = rows.length ? rows.map(r => `
-    <div class="card"><div class="top"><div><div class="who">${esc(r.client)}</div><div class="prop">${esc(r.property)} · ${esc(r.subject)}</div></div>
-    <span class="badge b-${r.status.toLowerCase()}">${r.status}</span></div>
-    <div class="msg">${esc(r.lastMessage)}</div>
-    <div class="meta"><span>${ago(r.received)}</span>${r.status !== 'Responded' ? `<button class="ghost" onclick="reply('${r.id}')">Agent drafts reply</button>` : ''}</div></div>`).join('')
-    : '<div class="empty">No inquiries yet.</div>';
+  try {
+    const rows = await jget('/api/inboxes');
+    const open = rows.filter(r => r.status !== 'Responded').length;
+    $('#s-open').textContent = rows.length;
+    $('#s-new').textContent = rows.filter(r => r.status === 'New').length;
+    $('#s-esc').textContent = rows.filter(r => r.status === 'Escalated').length;
+    $('#c-inbox').textContent = open ? open : '';
+    $('#inboxes').innerHTML = rows.length ? rows.map(r => `
+      <div class="card">
+        <div class="row">
+          <div class="avatar">${esc(initials(r.client))}</div>
+          <div style="flex:1;min-width:0">
+            <div class="who">${esc(r.client)}<span class="badge b-${esc(String(r.status).toLowerCase())}">${esc(r.status)}</span></div>
+            <div class="prop">${esc(r.property)} · ${esc(r.subject)}</div>
+            <div class="msg">${esc(r.lastMessage)}</div>
+            <div class="meta">
+              <span>${ago(r.received)}</span>
+              ${r.status !== 'Responded' ? `<button class="ghost" data-reply="${esc(r.id)}">Agent drafts reply</button>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>`).join('')
+      : `<div class="empty"><b>No inquiries yet</b>Incoming client messages will appear here.</div>`;
+    document.querySelectorAll('[data-reply]').forEach(b => b.onclick = () => reply(b.dataset.reply));
+  } catch (e) { $('#inboxes').innerHTML = `<div class="empty"><b>Could not load inboxes</b>The service may be waking up — refresh in a moment.</div>`; }
 }
+
 async function loadMems() {
-  const rows = await (await fetch('/api/memories')).json();
-  $('#mem-count').textContent = rows.length + ' entries';
-  $('#memories').innerHTML = rows.length ? rows.map(r => `
-    <div class="card mem"><div><div class="top"><span class="chip">${esc(r.type)}</span></div><div class="msg">${esc(r.entry)}</div>
-    <div class="bar"><i style="width:${r.confidence}%"></i></div></div><div class="conf">${r.confidence}%<br>${ago(r.recorded)}</div></div>`).join('')
-    : '<div class="empty">The Memory Bank is empty.</div>';
+  try {
+    const rows = await jget('/api/memories');
+    const avg = rows.length ? Math.round(rows.reduce((a, r) => a + (Number(r.confidence) || 0), 0) / rows.length) : 0;
+    $('#s-mem').textContent = rows.length;
+    $('#s-conf').textContent = rows.length ? avg + '%' : '—';
+    $('#c-mem').textContent = rows.length ? rows.length : '';
+    $('#memories').innerHTML = rows.length ? rows.map(r => `
+      <div class="card">
+        <div class="mem">
+          <div>
+            <div class="top" style="margin-bottom:8px"><span class="chip">${esc(r.type)}</span></div>
+            <div class="msg">${esc(r.entry)}</div>
+            <div class="bar"><i style="width:${Math.max(0, Math.min(100, Number(r.confidence) || 0))}%"></i></div>
+          </div>
+          <div class="conf">${Number(r.confidence) || 0}% confidence<br>${ago(r.recorded)}</div>
+        </div>
+      </div>`).join('')
+      : `<div class="empty"><b>The Memory Bank is empty</b>Preferences the agent learns will be stored here.</div>`;
+  } catch (e) { $('#memories').innerHTML = `<div class="empty"><b>Could not load memories</b>Refresh to retry.</div>`; }
 }
+
 async function loadLogs() {
-  const rows = await (await fetch('/api/logs')).json();
-  $('#log-count').textContent = rows.length + ' events';
-  $('#logs').innerHTML = rows.length ? rows.map(r => `
-    <div class="logline"><span class="t">${new Date(r.ts).toLocaleString()}</span><span class="sev s-${r.severity.toLowerCase()}">${r.severity}</span><span class="m">${esc(r.message)}</span></div>`).join('')
-    : '<div class="empty">No actions logged yet.</div>';
+  try {
+    const rows = await jget('/api/logs');
+    $('#s-log').textContent = rows.length;
+    $('#s-appr').textContent = rows.filter(r => /approval/i.test(r.severity || '')).length;
+    $('#c-log').textContent = rows.length ? rows.length : '';
+    $('#logs').innerHTML = rows.length ? rows.map(r => `
+      <div class="logline">
+        <span class="t">${new Date(r.ts).toLocaleString()}</span>
+        <span class="sev ${sevClass(r.severity)}">${esc(r.severity)}</span>
+        <span class="m">${esc(r.message)}</span>
+      </div>`).join('')
+      : `<div class="empty"><b>No actions logged yet</b>Agent activity will be recorded here.</div>`;
+  } catch (e) { $('#logs').innerHTML = `<div class="empty"><b>Could not load logs</b>Refresh to retry.</div>`; }
 }
-async function reply(id) { await fetch('/api/inboxes/' + id + '/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: 'response drafted' }) }); loadInboxes(); loadLogs(); }
 
-$('#f-inbox').onsubmit = async (e) => { e.preventDefault();
-  const b = { client: $('#i-client').value, property: $('#i-prop').value || 'General inquiry', subject: $('#i-subject').value || 'Inquiry', lastMessage: $('#i-msg').value };
-  await fetch('/api/inboxes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
-  ['i-client','i-prop','i-subject','i-msg'].forEach(id => $('#' + id).value = ''); loadInboxes(); loadLogs(); };
-$('#f-mem').onsubmit = async (e) => { e.preventDefault();
-  await fetch('/api/memories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: $('#m-type').value, entry: $('#m-entry').value, confidence: +$('#m-conf').value }) });
-  $('#m-entry').value = ''; loadMems(); loadLogs(); };
+async function reply(id) {
+  try {
+    const r = await fetch('/api/inboxes/' + id + '/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: 'response drafted' }) });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'Could not draft a reply'); }
+  } catch (e) { alert('Network error — try again'); }
+  loadInboxes(); loadLogs();
+}
 
-document.querySelectorAll('nav a').forEach(a => a.onclick = (e) => { e.preventDefault();
-  document.querySelectorAll('nav a').forEach(x => x.classList.remove('active')); a.classList.add('active');
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('on')); $('#view-' + a.dataset.v).classList.add('on'); });
+$('#f-inbox').onsubmit = async (e) => {
+  e.preventDefault(); $('#e-inbox').style.display = 'none';
+  const body = { client: $('#i-client').value, property: $('#i-prop').value || 'General inquiry', subject: $('#i-subject').value || 'Inquiry', lastMessage: $('#i-msg').value };
+  try {
+    const r = await fetch('/api/inboxes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Rejected');
+    ['i-client', 'i-prop', 'i-subject', 'i-msg'].forEach(id => $('#' + id).value = '');
+    loadInboxes(); loadLogs();
+  } catch (err) { $('#e-inbox').textContent = err.message; $('#e-inbox').style.display = 'block'; }
+};
 
+$('#f-mem').onsubmit = async (e) => {
+  e.preventDefault(); $('#e-mem').style.display = 'none';
+  const body = { type: $('#m-type').value, entry: $('#m-entry').value, confidence: +$('#m-conf').value };
+  try {
+    const r = await fetch('/api/memories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Rejected');
+    $('#m-entry').value = '';
+    loadMems(); loadLogs();
+  } catch (err) { $('#e-mem').textContent = err.message; $('#e-mem').style.display = 'block'; }
+};
+
+const LABELS = { inboxes: 'Live Inboxes', memories: 'Agent Memory Bank', logs: 'System Action Logs' };
+document.querySelectorAll('nav a').forEach(a => a.onclick = (e) => {
+  e.preventDefault();
+  document.querySelectorAll('nav a').forEach(x => x.classList.remove('active'));
+  a.classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
+  $('#view-' + a.dataset.v).classList.add('on');
+  $('#crumb').textContent = LABELS[a.dataset.v];
+});
+
+const tick = () => { $('#clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+tick(); setInterval(tick, 30000);
 loadInboxes(); loadMems(); loadLogs();
+setInterval(() => { loadInboxes(); loadLogs(); }, 60000);
 </script>
 </body>
 </html>
