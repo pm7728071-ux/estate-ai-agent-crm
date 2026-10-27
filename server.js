@@ -94,5 +94,27 @@ app.post('/api/admin/reset', resetGuard, (req, res) => {
 app.get('/api/logs', (req, res) => res.json(DB.logs.slice(0, 100)));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
-store.init().then(() => { DB = store.DB; const server = app.listen(PORT, () => console.log(`Estate AI Agent CRM listening on ${PORT}`));
+store.init().then(() => {
+  DB = store.DB;
+  // One-time cleanup (v1): strip evaluation/demo fingerprints so live counters are real.
+  try {
+    DB.migrations = DB.migrations || {};
+    if (!DB.migrations.purgeDemoV1) {
+      const seedIds = new Set(['inb-001', 'inb-002', 'inb-003', 'mem-001', 'mem-002', 'mem-003', 'log-001', 'log-002', 'log-003']);
+      const isTest = (v) => /^2547\d{6,}$|^check$/i.test(String(v || '').trim());
+      const testEntry = /^(Atlas persistence marker|Smoke test)/i;
+      const b = { inboxes: (DB.inboxes || []).length, memories: (DB.memories || []).length, logs: (DB.logs || []).length };
+      DB.inboxes = (DB.inboxes || []).filter(r => !seedIds.has(r.id));
+      DB.memories = (DB.memories || []).filter(r => !seedIds.has(r.id) && !isTest(r.subject) && !testEntry.test(String(r.entry || '')));
+      DB.logs = (DB.logs || []).filter(r => !seedIds.has(r.id) && !/\b2547\d{6,}\b/.test(String(r.message || '')) && !/\bcheck\b/.test(String(r.message || '')));
+      for (const k of Object.keys(DB.threads || {})) if (isTest(k)) delete DB.threads[k];
+      for (const k of Object.keys(DB.holds || {})) if (isTest((DB.holds[k] || {}).by)) delete DB.holds[k];
+      const a = { inboxes: DB.inboxes.length, memories: DB.memories.length, logs: DB.logs.length };
+      DB.migrations.purgeDemoV1 = new Date().toISOString();
+      log('INFO', 'Workspace cleaned for production: removed ' + (b.inboxes - a.inboxes) + ' demo inquiries, ' + (b.memories - a.memories) + ' demo memories, ' + (b.logs - a.logs) + ' demo log rows.');
+      save();
+      console.log('[migration] purgeDemoV1 done', b, '->', a);
+    }
+  } catch (e) { console.error('[migration] purgeDemoV1 failed:', e.message); }
+  const server = app.listen(PORT, () => console.log(`Estate AI Agent CRM listening on ${PORT}`));
 process.on('SIGTERM', () => server.close(() => process.exit(0))); });
