@@ -6,7 +6,7 @@ app.use(express.json({ limit: '50kb', verify: (req, res, buf) => { req.rawBody =
 app.use(express.static('public'));
 
 // ---------- data layer (seed + JSON file persistence where available) ----------
-const seed = {
+const demoSeed = {
   inboxes: [
     { id: 'inb-001', client: 'Wanjiku M.', property: 'Kilimani · 2BR Apartment', subject: 'Viewing request', lastMessage: 'Hi, can I view the 2BR on Saturday morning?', status: 'New', received: new Date(Date.now() - 26 * 60000).toISOString() },
     { id: 'inb-002', client: 'Brian O.', property: 'Karen · 4BR Villa', subject: 'Price inquiry', lastMessage: 'Is the villa still available at 85k? What is included in service charge?', status: 'Responded', received: new Date(Date.now() - 3 * 3600000).toISOString() },
@@ -23,6 +23,9 @@ const seed = {
     { id: 'log-003', ts: new Date(Date.now() - 19 * 3600000).toISOString(), severity: 'APPROVAL', message: 'Quarterly payment request from Amina H. escalated to operator — no commitment sent.' },
   ],
 };
+// Production starts empty. Set DEMO_SEED=1 to load the demonstration dataset
+// (also preserved for reference at /evidence.html).
+const seed = process.env.DEMO_SEED === '1' ? demoSeed : { inboxes: [], memories: [], logs: [] };
 const { createStore } = require('./store.js');
 const store = createStore(seed);
 let DB = null;
