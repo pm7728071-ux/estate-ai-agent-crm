@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, production-hardening]
+    branches: [main, production-hardening, multi-tenant-isolation]
   pull_request:
     branches: [main, production-hardening]
 
@@ -27,3 +27,5 @@ jobs:
         run: node tests/storage.test.js
       - name: Auth and property verification regression test
         run: node tests/property-verification.test.js
+      - name: Tenant isolation regression test
+        run: node tests/tenant-isolation.test.js

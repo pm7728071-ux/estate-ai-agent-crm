@@ -4,14 +4,16 @@ This document is an operational checklist, not a claim of certification or compl
 
 ## Current release status
 
-**Not ready for real customer data or unsupervised property commitments.** The existing app is an evaluation prototype. Complete every P0 item below and validate it in a staging environment before onboarding customers.
+**Not yet approved for real customer data.** This branch adds agency-token routing and tenant-scoped state, but it still requires CI/staging validation, per-user identities and roles, backups/restore drills, privacy/retention controls, and a security review before onboarding real agencies.
 
 ## P0 — required before real customers
 
 - [x] Initial shared bearer-token gate for non-public API routes; production requires `ADMIN_API_TOKEN` (single-workspace only, not a complete identity system).
-- [ ] Tenant/agency scoping on every read and write; derive tenant identity from the authenticated principal, never from request input.
+- [x] Initial tenant/agency scoping for API reads/writes: the authenticated bearer token maps to a server-side tenant ID; request-supplied tenant IDs are ignored.
+- [ ] Replace shared per-agency bearer keys with individual user identities, session expiry, roles, revocation/rotation, and agency-member management before handling real tenant personal data.
 - [x] Production refuses startup without MongoDB configuration or when MongoDB is unreachable rather than silently using JSON.
-- [ ] Replace the single global state document with durable, tenant-scoped collections, indexes, transactions where needed, and controlled schema migrations.
+- [x] Initial tenant-scoped MongoDB documents (`tenant:<id>`) and tenant-specific JSON development files; legacy `db` state is migrated only to the default tenant.
+- [ ] Replace whole-document writes with normalized tenant-scoped collections, concurrency-safe updates/transactions, indexes, and versioned migrations before multi-user production workloads.
 - [ ] Calendar-backed viewing availability and booking. Hardcoded listing recommendations and fabricated viewing slots have been removed; the agent now defers to a human when it cannot verify availability.
 - [ ] Enforce webhook signature validation in production and configure the Meta app secret. The current in-memory deduplication map is only a best-effort single-process safeguard; use durable idempotency keys for multiple instances/restarts.
 - [ ] Add approval persistence and a real operator workflow. An approval response must not imply a message, booking, payment, or offer was sent unless the external system confirms it.
@@ -28,6 +30,16 @@ This document is an operational checklist, not a claim of certification or compl
 - Added persisted approval records and explicit approve/reject decisions. Decisions are recorded only and do not trigger external actions.
 - Added an initial workspace token field to the UI; token is held in session storage for the current tab.
 - Hardened WhatsApp signature handling and passed the workspace token to internal agent calls.
+
+
+## Multi-agency configuration (this branch)
+
+- Set `ADMIN_API_TOKEN` to a unique random secret of at least 32 characters for the legacy/default workspace.
+- Set `AGENCY_API_KEYS` to a JSON object mapping stable agency IDs to distinct random secrets, for example `{"agency-nairobi":"<unique-secret-of-at-least-32-characters>"}`. Keep this variable in Render's secret environment settings; never commit actual tokens.
+- Every API request is assigned to the tenant whose configured token authenticated it. The API does not accept a tenant ID from request bodies or query strings as authority.
+- MongoDB tenant records use separate IDs in the `tenant_state` collection. The legacy `db` record is copied only to the `default` tenant; newly configured agency tenants start with empty state.
+- Provision keys out-of-band, provide each agency only its own key, and rotate/revoke keys promptly. This first version uses shared agency-level keys, not per-user identity or role-based access control.
+- **Do not onboard real tenant personal data yet.** Wait until the tenant-isolation tests pass in CI, a staging deployment is verified, and per-user access, privacy/retention/deletion, audit, backups and recovery are reviewed.
 
 ## P1 — reliability and customer value
 

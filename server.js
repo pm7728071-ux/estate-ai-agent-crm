@@ -7,28 +7,36 @@ app.disable('x-powered-by');
 app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'strict-origin-when-cross-origin'); res.set('X-Frame-Options', 'DENY'); next(); });
 app.use(express.static('public'));
 
-// Production must never expose workspace APIs anonymously. This is a
-// single-workspace bearer-token gate, not yet a multi-tenant identity system.
+// Agency API credentials are configured out-of-band in Render as JSON:
+// AGENCY_API_KEYS={"agency-a":"long-random-secret-...","agency-b":"another-long-secret-..."}
+// ADMIN_API_TOKEN remains the credential for the legacy/default workspace only.
 const API_TOKEN = process.env.ADMIN_API_TOKEN || '';
 if (process.env.NODE_ENV === 'production' && API_TOKEN.length < 32) {
   throw new Error('Production requires ADMIN_API_TOKEN with at least 32 characters.');
+}
+let AGENCY_API_KEYS = {};
+try { AGENCY_API_KEYS = JSON.parse(process.env.AGENCY_API_KEYS || '{}'); }
+catch { throw new Error('AGENCY_API_KEYS must be valid JSON mapping tenant IDs to secrets.'); }
+if (!AGENCY_API_KEYS || typeof AGENCY_API_KEYS !== 'object' || Array.isArray(AGENCY_API_KEYS)) throw new Error('AGENCY_API_KEYS must be a JSON object.');
+const TENANT_TOKENS = new Map();
+TENANT_TOKENS.set('default', API_TOKEN);
+for (const [tenantId, token] of Object.entries(AGENCY_API_KEYS)) {
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(tenantId) || tenantId === 'default') throw new Error('Agency IDs must be 1-64 letters, digits, underscores, or hyphens; default is reserved.');
+  if (typeof token !== 'string' || token.length < 32) throw new Error('Every agency API key must contain at least 32 characters.');
+  TENANT_TOKENS.set(tenantId, token);
 }
 function constantTimeTokenMatch(candidate, expected) {
   const a = Buffer.from(String(candidate || ''));
   const b = Buffer.from(String(expected || ''));
   return a.length === b.length && a.length > 0 && require('crypto').timingSafeEqual(a, b);
 }
-// Apply rate limiting before authentication so failed-token attempts are counted too.
 const hits = new Map();
 let requestsSincePrune = 0;
 app.use('/api', (req, res, next) => {
-  const now = Date.now();
-  const ip = req.ip || 'unknown';
+  const now = Date.now(), ip = req.ip || 'unknown';
   let entry = hits.get(ip);
   if (!entry || now - entry.start >= 60000) entry = { start: now, count: 0 };
-  entry.count += 1;
-  hits.set(ip, entry);
-  requestsSincePrune += 1;
+  entry.count += 1; hits.set(ip, entry); requestsSincePrune += 1;
   if (requestsSincePrune >= 100) {
     requestsSincePrune = 0;
     for (const [key, value] of hits) if (now - value.start >= 60000) hits.delete(key);
@@ -39,13 +47,16 @@ app.use('/api', (req, res, next) => {
 });
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
-  if (!API_TOKEN && process.env.NODE_ENV !== 'production') return next();
+  if (!API_TOKEN && process.env.NODE_ENV !== 'production' && TENANT_TOKENS.size === 1) { req.tenantId = 'default'; return next(); }
   const header = req.get('authorization') || '';
   const candidate = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!constantTimeTokenMatch(candidate, API_TOKEN)) {
+  let tenantId = null;
+  for (const [id, expected] of TENANT_TOKENS) if (constantTimeTokenMatch(candidate, expected)) { tenantId = id; break; }
+  if (!tenantId) {
     res.set('WWW-Authenticate', 'Bearer realm="Estate AI Agent CRM"');
     return res.status(401).json({ error: 'Authentication required', code: 'AUTH_REQUIRED' });
   }
+  req.tenantId = tenantId;
   next();
 });
 
@@ -74,10 +85,14 @@ const { createStore } = require('./store.js');
 const store = createStore(seed);
 let DB = null;
 const save = () => store.save();
-const log = (severity, message) => { DB.logs.unshift({ id: 'log-' + Date.now() + '-' + Math.floor(Math.random() * 999), ts: new Date().toISOString(), severity, message }); save(); };
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  store.runWithTenant(req.tenantId, next).catch(() => res.status(500).json({ error: 'Workspace unavailable' }));
+});
+const log = (severity, message) => { const activeDB = store.getCurrentDB(); if (!activeDB) return; activeDB.logs.unshift({ id: 'log-' + Date.now() + '-' + Math.floor(Math.random() * 999), ts: new Date().toISOString(), severity, message: String(message).slice(0, 500) }); save(); };
 
 // Mount the agent loop before routes below; lazy DB getter means storage init can fill DB later.
-require('./agent.js')({ app, getDB: () => DB, save, log });
+require('./agent.js')({ app, getDB: () => store.getCurrentDB(), save, log });
 
 // WhatsApp Cloud API webhook (Meta) — mounts /webhook/whatsapp
 require('./whatsapp.js')({ app, log });
@@ -86,8 +101,9 @@ require('./whatsapp.js')({ app, log });
 app.get('/health', (req, res) => { const ready = store.name() === 'mongo' || process.env.NODE_ENV !== 'production'; res.status(ready ? 200 : 503).json({ ok: ready, service: 'estate-ai-agent-crm', storage: store.name(), authentication: API_TOKEN ? 'enabled' : 'development-only', ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }); });
 
 // Verified property inventory. Listing availability is never inferred from demo constants.
-app.get('/api/properties', (req, res) => res.json(DB.properties || []));
+app.get('/api/properties', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.properties || []); });
 app.post('/api/properties', (req, res) => {
+  const DB = store.getCurrentDB();
   const b = req.body || {};
   const title = String(b.title || '').trim().slice(0, 120);
   const area = String(b.area || '').trim().slice(0, 80);
@@ -110,6 +126,7 @@ app.post('/api/properties', (req, res) => {
   res.status(201).json(property);
 });
 app.patch('/api/properties/:id', (req, res) => {
+  const DB = store.getCurrentDB();
   const item = (DB.properties || []).find(p => p.id === req.params.id);
   if (!item) return res.status(404).json({ error: 'Property not found' });
   const b = req.body || {};
@@ -125,6 +142,7 @@ app.patch('/api/properties/:id', (req, res) => {
   res.json(item);
 });
 app.post('/api/properties/:id/verify', (req, res) => {
+  const DB = store.getCurrentDB();
   const item = (DB.properties || []).find(p => p.id === req.params.id);
   if (!item) return res.status(404).json({ error: 'Property not found' });
   if (item.status !== 'available') return res.status(409).json({ error: 'Set status to available before recording verification' });
@@ -138,8 +156,9 @@ app.post('/api/properties/:id/verify', (req, res) => {
   res.json({ ok: true, property: item });
 });
 
-app.get('/api/approvals', (req, res) => res.json(DB.approvals || []));
+app.get('/api/approvals', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.approvals || []); });
 app.post('/api/approvals/:id/decision', (req, res) => {
+  const DB = store.getCurrentDB();
   const item = (DB.approvals || []).find(a => a.id === req.params.id);
   if (!item) return res.status(404).json({ error: 'Approval not found' });
   if (item.status !== 'pending') return res.status(409).json({ error: 'Approval already decided' });
@@ -151,8 +170,9 @@ app.post('/api/approvals/:id/decision', (req, res) => {
   save(); res.json({ ok: true, approval: item, externalActionExecuted: false });
 });
 
-app.get('/api/inboxes', (req, res) => res.json(DB.inboxes));
+app.get('/api/inboxes', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.inboxes); });
 app.post('/api/inboxes', (req, res) => {
+  const DB = store.getCurrentDB();
   const { client, property, subject, lastMessage } = req.body || {};
   if (!client || !lastMessage) return res.status(400).json({ error: 'client and lastMessage are required' });
   const item = { id: 'inb-' + Date.now(), client: String(client).slice(0, 80), property: String(property || 'General inquiry').slice(0, 120), subject: String(subject || 'Inquiry').slice(0, 80), lastMessage: String(lastMessage).slice(0, 500), status: 'New', received: new Date().toISOString() };
@@ -161,6 +181,7 @@ app.post('/api/inboxes', (req, res) => {
   res.status(201).json(item);
 });
 app.post('/api/inboxes/:id/reply', (req, res) => {
+  const DB = store.getCurrentDB();
   const item = DB.inboxes.find(i => i.id === req.params.id);
   if (!item) return res.status(404).json({ error: 'Inbox item not found' });
   if (item.status === 'Escalated') return res.status(409).json({ error: 'Escalated items await operator decision' });
@@ -169,8 +190,9 @@ app.post('/api/inboxes/:id/reply', (req, res) => {
   res.json(item);
 });
 
-app.get('/api/memories', (req, res) => res.json(DB.memories));
+app.get('/api/memories', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.memories); });
 app.post('/api/memories', (req, res) => {
+  const DB = store.getCurrentDB();
   const { type, entry, confidence } = req.body || {};
   if (!entry) return res.status(400).json({ error: 'entry is required' });
   const m = { id: 'mem-' + Date.now(), type: String(type || 'Client preference').slice(0, 40), entry: String(entry).slice(0, 500), confidence: Math.min(100, Math.max(0, Number(confidence) || 80)), recorded: new Date().toISOString() };
@@ -182,6 +204,7 @@ app.post('/api/memories', (req, res) => {
 // Guarded one-time cleanup: clears evaluation/test rows from the live database.
 // Requires ADMIN_RESET_TOKEN (set it in Render, run once, then remove it).
 const resetGuard = (req, res, next) => {
+  if (req.tenantId !== 'default') return res.status(403).json({ error: 'This maintenance route is restricted to the default workspace.' });
   const expected = process.env.ADMIN_RESET_TOKEN;
   if (!expected) return res.status(503).json({ error: 'ADMIN_RESET_TOKEN not configured' });
   const given = req.get('x-admin-token') || '';
@@ -196,7 +219,7 @@ app.post('/api/admin/reset', resetGuard, (req, res) => {
   res.json({ ok: true, cleared });
 });
 
-app.get('/api/logs', (req, res) => res.json(DB.logs.slice(0, 100)));
+app.get('/api/logs', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.logs.slice(0, 100)); });
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 store.init().then(() => {
