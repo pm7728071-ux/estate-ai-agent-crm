@@ -3,13 +3,8 @@
  */
 module.exports = function mountAgent({ app, getDB, save, log }) {
   const reply = (res, body) => res.json(body);
-  const props = [
-    { name: 'Kilimani 2BR Apartment', rent: '45,000 KES', beds: 2, area: 'Kilimani' },
-    { name: 'Lavington 2BR Apartment', rent: '60,000 KES', beds: 2, area: 'Lavington' },
-    { name: 'Karen 4BR Villa', rent: '85,000 KES', beds: 4, area: 'Karen' },
-    { name: 'Westlands Office Suite', rent: '120,000 KES', beds: 0, area: 'Westlands' },
-  ];
-  const slots = ['Tomorrow at 6:00 PM', 'Thursday at 5:30 PM'];
+  // Only records with an explicit availability status, verification note, and timestamp can be recommended.
+  const props = () => (getDB().properties || []).filter(p => p.status === 'available' && p.verifiedAt && p.verificationNote);
 
   app.post('/api/agent/message', (req, res) => {
     const { channel, from, text } = req.body || {};
@@ -29,10 +24,12 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
 
     // 1) approval gate — consequential actions never leave without a human
     if (/(send|email|draft).*(offer|letter)|formal offer|commit to|sign the|pay the deposit|deposit of/i.test(t)) {
-      const approvalId = 'apr-' + Date.now();
-      log('APPROVAL', 'Approval requested for ' + from + ' — formal offer letter / commitment held. Nothing sent.');
+      const approvalId = 'apr-' + require('crypto').randomUUID();
+      DB.approvals = DB.approvals || [];
+      DB.approvals.unshift({ id: approvalId, requester: from, channel: channel || 'unknown', action: 'Formal offer letter / external commitment', summary: msg.slice(0, 300), status: 'pending', createdAt: new Date().toISOString() });
+      log('APPROVAL', 'Approval requested for ' + from + ' — formal offer / commitment held. Nothing sent.');
       actions.push({ type: 'APPROVAL_REQUESTED', approvalId, detail: 'Formal offer letter / commitment' });
-      return out('I have prepared the formal offer letter and the commitment to the 15th — but I will not send anything until a human approves it. It has been queued for operator approval now, and you will see it in System Action Logs.', { requiresApproval: true, approvalId, intent: 'approval-gate' });
+      return out('This request needs a human review before any offer or commitment is sent. I have saved it to the pending approvals queue; no external message or commitment has been made.', { requiresApproval: true, approvalId, intent: 'approval-gate' });
     }
 
     // 2) landlord hold instruction
@@ -64,8 +61,8 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
 
     // 6) viewing request — propose concrete slots
     if (/view|viewing|see the|appointment|visit/i.test(t)) {
-      th.offeredSlots = slots;
-      return out('Happy to arrange that. I have two slots available: ' + slots[0] + ' or ' + slots[1] + '. Which works better for you?', { intent: 'viewing-request', slots });
+      th.offeredSlots = null;
+      return out('I can help arrange a viewing, but I cannot verify a live calendar slot yet. I have noted your request for the team to confirm a time. No appointment has been booked.', { intent: 'viewing-needs-human-confirmation', requiresApproval: true });
     }
 
     // 7) budget — store, and resolve conflicts to the latest value
@@ -83,8 +80,9 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
       }
       th.budget = th.budget || val;
       addMem('Client preference', 'Budget: ' + val + ' KES');
-      const fit = props.filter(p => parseInt(p.rent.replace(/[^0-9]/g, ''), 10) <= parseInt(num, 10) * 1000);
-      return out('Saved — your budget of ' + val + ' KES is now in the memory bank. ' + (fit.length ? 'In your range: ' + fit.map(p => p.name + ' (' + p.rent + ')').join(', ') + '.' : 'Nothing matches exactly yet — here are the closest options: ' + props.slice(0, 2).map(p => p.name + ' (' + p.rent + ')').join(', ') + '.') + ' Would you like to arrange a viewing?', { intent: 'budget-saved' });
+      const inventory = props();
+      const fit = inventory.filter(p => Number(p.rent) <= parseInt(num, 10) * 1000);
+      return out('Saved — your budget of ' + val + ' KES is now in the memory bank. ' + (fit.length ? 'In your range: ' + fit.map(p => p.title + ' (' + Number(p.rent).toLocaleString('en-KE') + ' KES)').join(', ') + '.' : 'Nothing matches exactly yet — here are the closest options: ' + inventory.slice(0, 2).map(p => p.title + ' (' + Number(p.rent).toLocaleString('en-KE') + ' KES)').join(', ') + '.') + ' Would you like to arrange a viewing?', { intent: 'budget-saved' });
     }
 
     // 8) stated preferences
@@ -103,12 +101,14 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
     if (/available|options|looking for|apartment|house|3br|2br|4br|office|under\s*\d/i.test(t)) {
       const wantBeds = parseInt((t.match(/(\d)\s?br/) || [])[1] || '0', 10);
       const wantArea = ['westlands', 'karen', 'kilimani', 'lavington'].find(a => t.includes(a));
-      const fits = props.filter(p => (!wantBeds || p.beds === wantBeds) && (!wantArea || p.area.toLowerCase() === wantArea));
+      const inventory = props();
+      const fits = inventory.filter(p => (!wantBeds || p.bedrooms === wantBeds) && (!wantArea || p.area.toLowerCase() === wantArea));
       if (fits.length) {
-        return out('Yes — available now: ' + fits.map(p => p.name + ' at ' + p.rent + '/month').join('; ') + '. Would you like photos or a viewing?', { intent: 'availability' });
+        return out('These listings are marked available based on the agency\'s recorded verification: ' + fits.map(p => p.title + ' at ' + Number(p.rent).toLocaleString('en-KE') + ' KES/month (verified ' + new Date(p.verifiedAt).toLocaleDateString('en-KE') + ')').join('; ') + '. Please confirm current availability with the agent before making a commitment.', { intent: 'availability' });
       }
-      const alts = props.filter(p => !wantBeds || p.beds <= wantBeds + 1).slice(0, 3);
-      return out('We do not have an exact match' + (wantBeds ? ' for a ' + wantBeds + 'BR' : '') + (wantArea ? ' in ' + wantArea : '') + ' right now — here are similar alternatives you could consider instead: ' + alts.map(p => p.name + ' at ' + p.rent + '/month').join('; ') + '.', { intent: 'alternatives' });
+      const alts = inventory.filter(p => !wantBeds || p.bedrooms <= wantBeds + 1).slice(0, 3);
+      if (!inventory.length) return out('I cannot verify live property availability yet because the agency inventory has no currently verified listings. I have not invented property options. I can ask an agent to follow up with confirmed matches.', { intent: 'inventory-unavailable', requiresApproval: true });
+      return out('I could not find an exact match' + (wantBeds ? ' for a ' + wantBeds + 'BR' : '') + (wantArea ? ' in ' + wantArea : '') + '. Verified alternatives: ' + (alts.map(p => p.title + ' at ' + Number(p.rent).toLocaleString('en-KE') + ' KES/month').join('; ') || 'Please ask an agent to review other options.') + '.', { intent: 'alternatives' });
     }
 
     // 10) default — helpful, memory-aware
