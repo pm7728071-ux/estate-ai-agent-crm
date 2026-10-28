@@ -18,6 +18,25 @@ function constantTimeTokenMatch(candidate, expected) {
   const b = Buffer.from(String(expected || ''));
   return a.length === b.length && a.length > 0 && require('crypto').timingSafeEqual(a, b);
 }
+// Apply rate limiting before authentication so failed-token attempts are counted too.
+const hits = new Map();
+let requestsSincePrune = 0;
+app.use('/api', (req, res, next) => {
+  const now = Date.now();
+  const ip = req.ip || 'unknown';
+  let entry = hits.get(ip);
+  if (!entry || now - entry.start >= 60000) entry = { start: now, count: 0 };
+  entry.count += 1;
+  hits.set(ip, entry);
+  requestsSincePrune += 1;
+  if (requestsSincePrune >= 100) {
+    requestsSincePrune = 0;
+    for (const [key, value] of hits) if (now - value.start >= 60000) hits.delete(key);
+    if (hits.size > 5000) hits.clear();
+  }
+  if (entry.count > 60) return res.status(429).json({ error: 'Too many requests', code: 'RATE_LIMITED' });
+  next();
+});
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
   if (!API_TOKEN && process.env.NODE_ENV !== 'production') return next();
@@ -56,27 +75,6 @@ const store = createStore(seed);
 let DB = null;
 const save = () => store.save();
 const log = (severity, message) => { DB.logs.unshift({ id: 'log-' + Date.now() + '-' + Math.floor(Math.random() * 999), ts: new Date().toISOString(), severity, message }); save(); };
-
-// Rate limiting must be mounted BEFORE API routes. Keep the in-memory limiter
-// intentionally modest; multi-instance production needs a shared rate-limit store.
-const hits = new Map();
-let requestsSincePrune = 0;
-app.use('/api', (req, res, next) => {
-  const now = Date.now();
-  const ip = req.ip || 'unknown';
-  let entry = hits.get(ip);
-  if (!entry || now - entry.start >= 60000) entry = { start: now, count: 0 };
-  entry.count += 1;
-  hits.set(ip, entry);
-  requestsSincePrune += 1;
-  if (requestsSincePrune >= 100) {
-    requestsSincePrune = 0;
-    for (const [key, value] of hits) if (now - value.start >= 60000) hits.delete(key);
-    if (hits.size > 5000) hits.clear();
-  }
-  if (entry.count > 60) return res.status(429).json({ error: 'Too many requests', code: 'RATE_LIMITED' });
-  next();
-});
 
 // Mount the agent loop before routes below; lazy DB getter means storage init can fill DB later.
 require('./agent.js')({ app, getDB: () => DB, save, log });
