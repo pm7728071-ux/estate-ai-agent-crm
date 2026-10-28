@@ -51,13 +51,7 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
       return out('I am sorry — that is not the experience you deserve, and I want to help fix whatever went wrong. I have flagged this conversation to our operations manager, who will follow up with you personally.', { intent: 'escalation', escalated: true });
     }
 
-    // 5) confirm a proposed viewing slot
-    if (/(yes|confirm|ok|book)/i.test(t) && /(book|first|slot)/i.test(t) && th.offeredSlots) {
-      const slot = th.offeredSlots[0];
-      log('VIEWING_CONFIRMED', 'Viewing confirmed for ' + from + ' — ' + slot + ' (Kilimani 2BR). Calendar entry created.');
-      actions.push({ type: 'VIEWING_CONFIRMED', slot, property: 'Kilimani 2BR Apartment' });
-      return out('Confirmed. Your viewing is booked for ' + slot + ' at the Kilimani 2BR Apartment. I have sent the details and will remind you the day before.', { intent: 'viewing-confirmed', viewing: { slot, property: 'Kilimani 2BR Apartment' } });
-    }
+    // Booking confirmation is intentionally disabled until a real calendar integration exists.
 
     // 6) viewing request — propose concrete slots
     if (/view|viewing|see the|appointment|visit/i.test(t)) {
@@ -76,13 +70,14 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
         else addMem('Client preference', 'Budget updated: ' + val + ' KES');
         th.budget = val;
         log('MEMORY_UPDATED', 'Budget for ' + from + ' changed to ' + val + ' — memory bank updated, old value superseded.');
-        return out('Noted — I have updated your budget to ' + val + ' and replaced the old figure in the memory bank. The Kilimani 2BR at 45,000 KES and Lavington 2BR at 60,000 KES both fit that range. Want me to arrange a viewing?', { intent: 'budget-update' });
+        const current = props().filter(p => Number(p.rent) <= Number(num) * 1000);
+        return out('Noted — I have updated your budget to ' + val + ' and replaced the old figure in the memory bank. ' + (current.length ? 'Verified listings in range: ' + current.map(p => p.title + ' (' + Number(p.rent).toLocaleString('en-KE') + ' KES)').join(', ') + '.' : 'I do not currently have verified listings in that budget, so I will not invent recommendations.') + ' A team member can confirm suitable options.', { intent: 'budget-update' });
       }
       th.budget = th.budget || val;
       addMem('Client preference', 'Budget: ' + val + ' KES');
       const inventory = props();
       const fit = inventory.filter(p => Number(p.rent) <= parseInt(num, 10) * 1000);
-      return out('Saved — your budget of ' + val + ' KES is now in the memory bank. ' + (fit.length ? 'In your range: ' + fit.map(p => p.title + ' (' + Number(p.rent).toLocaleString('en-KE') + ' KES)').join(', ') + '.' : 'Nothing matches exactly yet — here are the closest options: ' + inventory.slice(0, 2).map(p => p.title + ' (' + Number(p.rent).toLocaleString('en-KE') + ' KES)').join(', ') + '.') + ' Would you like to arrange a viewing?', { intent: 'budget-saved' });
+      return out('Saved — your budget of ' + val + ' KES is now in the memory bank. ' + (fit.length ? 'In your range: ' + fit.map(p => p.title + ' (' + Number(p.rent).toLocaleString('en-KE') + ' KES)').join(', ') + '.' : 'No verified listing currently matches that budget. I will not invent alternatives; an agent can check the latest inventory.') + ' Would you like to arrange a viewing?', { intent: 'budget-saved' });
     }
 
     // 8) stated preferences
