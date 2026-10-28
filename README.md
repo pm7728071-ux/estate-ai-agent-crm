@@ -2,7 +2,7 @@
 
 Autonomous real estate AI agent dashboard: **Live Inboxes**, **Agent Memory Bank**, **System Action Logs**.
 
-Status: evaluation prototype, **not yet production-ready for real customer data**. See [the production readiness gate](docs/PRODUCTION_READINESS.md) before deploying to a live agency. The `production-hardening` branch contains initial webhook hardening and CI checks; these do not complete the full release gate.
+Status: **hardening in progress; not yet approved for real customer data**. See [the production readiness gate](docs/PRODUCTION_READINESS.md). The `production-hardening` branch adds API token gating, fail-closed storage configuration, property inventory, persistent approval records, a refreshed dashboard, webhook hardening, and CI checks. True tenant isolation, role-based identities, robust transactional persistence, durable webhook idempotency, and comprehensive tests remain release blockers.
 
 ## Run locally
 ```bash
@@ -10,13 +10,17 @@ npm install && npm start   # http://localhost:3000
 ```
 
 ## API
-- `GET /health` — uptime check
-- `GET/POST /api/inboxes` — client conversations (`POST /api/inboxes/:id/reply` — agent drafts a reply)
-- `GET/POST /api/memories` — the agent's learned knowledge (type, entry, confidence)
-- `GET /api/logs` — timestamped, attributable action log
+- `GET /health` — health/readiness check (public)
+- `GET/POST /api/inboxes` — client conversations
+- `GET/POST /api/memories` — client/property/policy memory
+- `GET/POST/PATCH /api/properties` — listing inventory and status
+- `GET /api/approvals`, `POST /api/approvals/:id/decision` — human review queue
+- `GET /api/logs` — action log
 
-## Deploy to Render (free plan)
-The repo includes a `render.yaml` blueprint. In Render: **New → Blueprint → select this repo → Apply** — build `npm install`, start `node server.js`, health check `/health`.
+All `/api/*` endpoints except `/api/health` require `Authorization: Bearer <ADMIN_API_TOKEN>` in production. The dashboard has a workspace-token field; the token stays in the current browser tab. Keep it secret. This is currently a **single-workspace shared-token gate**, not multi-tenant authentication or role-based access control.
+
+## Deploy to Render
+The `render.yaml` blueprint enables production mode, generates an API token, and requires secrets to be configured. In Render, set `MONGODB_URI` to a durable MongoDB deployment before starting the service; production intentionally refuses to start without it. Add Meta WhatsApp credentials only if using that integration. After deploy, copy `ADMIN_API_TOKEN` from Render's environment settings into the dashboard's Workspace access token field. Never put secrets in URLs, source code, screenshots, or commits.
 
 ## Roadmap
 Days 1–14 evaluation engine · 15–30 execution loop (understand → memory → act → verify → approval gate) · 31–45 prove improvement · 46–60 release evidence.
