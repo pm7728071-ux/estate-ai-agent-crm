@@ -100,7 +100,7 @@ require('./whatsapp.js')({ app, log });
 app.get('/health', (req, res) => { const ready = store.name() === 'mongo' || process.env.NODE_ENV !== 'production'; res.status(ready ? 200 : 503).json({ ok: ready, service: 'estate-ai-agent-crm', storage: store.name(), authentication: API_TOKEN ? 'enabled' : 'development-only', ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }); });
 
 // Verified property inventory. Listing availability is never inferred from demo constants.
-app.get('/api/properties', (req, res) => res.json(DB.properties || []));
+app.get('/api/properties', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.properties || []); });
 app.post('/api/properties', (req, res) => {
   const DB = store.getCurrentDB();
   const b = req.body || {};
@@ -155,7 +155,7 @@ app.post('/api/properties/:id/verify', (req, res) => {
   res.json({ ok: true, property: item });
 });
 
-app.get('/api/approvals', (req, res) => res.json(DB.approvals || []));
+app.get('/api/approvals', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.approvals || []); });
 app.post('/api/approvals/:id/decision', (req, res) => {
   const DB = store.getCurrentDB();
   const item = (DB.approvals || []).find(a => a.id === req.params.id);
@@ -169,7 +169,7 @@ app.post('/api/approvals/:id/decision', (req, res) => {
   save(); res.json({ ok: true, approval: item, externalActionExecuted: false });
 });
 
-app.get('/api/inboxes', (req, res) => res.json(DB.inboxes));
+app.get('/api/inboxes', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.inboxes); });
 app.post('/api/inboxes', (req, res) => {
   const DB = store.getCurrentDB();
   const { client, property, subject, lastMessage } = req.body || {};
@@ -189,7 +189,7 @@ app.post('/api/inboxes/:id/reply', (req, res) => {
   res.json(item);
 });
 
-app.get('/api/memories', (req, res) => res.json(DB.memories));
+app.get('/api/memories', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.memories); });
 app.post('/api/memories', (req, res) => {
   const DB = store.getCurrentDB();
   const { type, entry, confidence } = req.body || {};
@@ -203,6 +203,7 @@ app.post('/api/memories', (req, res) => {
 // Guarded one-time cleanup: clears evaluation/test rows from the live database.
 // Requires ADMIN_RESET_TOKEN (set it in Render, run once, then remove it).
 const resetGuard = (req, res, next) => {
+  if (req.tenantId !== 'default') return res.status(403).json({ error: 'This maintenance route is restricted to the default workspace.' });
   const expected = process.env.ADMIN_RESET_TOKEN;
   if (!expected) return res.status(503).json({ error: 'ADMIN_RESET_TOKEN not configured' });
   const given = req.get('x-admin-token') || '';
@@ -217,7 +218,7 @@ app.post('/api/admin/reset', resetGuard, (req, res) => {
   res.json({ ok: true, cleared });
 });
 
-app.get('/api/logs', (req, res) => res.json(DB.logs.slice(0, 100)));
+app.get('/api/logs', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.logs.slice(0, 100)); });
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 store.init().then(() => {
