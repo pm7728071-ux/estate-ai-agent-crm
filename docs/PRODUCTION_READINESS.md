@@ -15,15 +15,16 @@ This document is an operational checklist, not a claim of certification or compl
 - [ ] Calendar-backed viewing availability and booking. Hardcoded listing recommendations and fabricated viewing slots have been removed; the agent now defers to a human when it cannot verify availability.
 - [ ] Enforce webhook signature validation in production and configure the Meta app secret. The current in-memory deduplication map is only a best-effort single-process safeguard; use durable idempotency keys for multiple instances/restarts.
 - [ ] Add approval persistence and a real operator workflow. An approval response must not imply a message, booking, payment, or offer was sent unless the external system confirms it.
-- [ ] Add request validation, payload limits, per-principal rate limits, secure headers, safe error responses, and audit events that avoid unnecessary personal data.
-- [x] Initial GitHub Actions CI workflow for syntax checks and storage regression test.
+- [x] Add initial request payload limits, baseline security headers, a simple API rate limiter, and input validation on core property/approval routes; rate limiting is in-memory and not suitable for multi-instance production.
+- [ ] Complete per-principal rate limits, consistent validation for every route, safe error responses, and audit events that avoid unnecessary personal data.
+- [x] Initial GitHub Actions CI workflow for syntax checks, storage regression test, API token gate, explicit property verification, and approval-queue regression checks.
 - [ ] Add authenticated API/security tests, dependency auditing, backup/restore checks, and a staging deployment.
 - [ ] Establish privacy notices, retention/deletion controls, access procedures, incident response, and applicable Kenyan data-protection obligations before processing personal data.
 
 ## Implemented on `production-hardening` (not yet independently validated)
 
 - Modernized responsive CRM styling and added property inventory and human approval views.
-- Added create/list/update-status property APIs, with verification notes and timestamps; the agent only recommends records marked available with a recorded verification note and timestamp.
+- Added create/list/update-status property APIs and an explicit verification action; changing a listing to available no longer automatically marks it verified. The agent only recommends records with a recorded verification note and timestamp.
 - Added persisted approval records and explicit approve/reject decisions. Decisions are recorded only and do not trigger external actions.
 - Added an initial workspace token field to the UI; token is held in session storage for the current tab.
 - Hardened WhatsApp signature handling and passed the workspace token to internal agent calls.
