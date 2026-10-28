@@ -25,3 +25,5 @@ jobs:
           node --check whatsapp.js
       - name: Storage regression test
         run: node tests/storage.test.js
+      - name: Auth and property verification regression test
+        run: node tests/property-verification.test.js
