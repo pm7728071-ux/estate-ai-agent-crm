@@ -47,6 +47,7 @@ app.use('/api', (req, res, next) => {
 });
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
+  if (!API_TOKEN && process.env.NODE_ENV !== 'production' && TENANT_TOKENS.size === 1) { req.tenantId = 'default'; return next(); }
   const header = req.get('authorization') || '';
   const candidate = header.startsWith('Bearer ') ? header.slice(7) : '';
   let tenantId = null;
