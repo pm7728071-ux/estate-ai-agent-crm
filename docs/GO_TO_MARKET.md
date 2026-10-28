@@ -29,7 +29,7 @@ Start in Nairobi because public agency directories show a dense set of active ag
 Possible discovery prospects (approach politely; ask for a short interview, not an immediate sale):
 - Coral Property International — https://coralpi.com/
 - Eastwood Consulting — https://eastwood.co.ke/
-- Domira Realtors — https://domirarealtors.co.ke/
+- Domira Realtors — https://domirarealtors.com/
 - Sir Francis Homes — https://sirfrancishomes.co.ke/
 - Realty Plus — https://yellow.co.ke/categories/estate-agents
 - Use BuyRentKenya's agency directory to find more independent firms: https://www.buyrentkenya.com/estate-agents
