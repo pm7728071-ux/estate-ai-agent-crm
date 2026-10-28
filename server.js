@@ -3,7 +3,32 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '50kb', verify: (req, res, buf) => { req.rawBody = buf; } }));
+app.disable('x-powered-by');
+app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'strict-origin-when-cross-origin'); res.set('X-Frame-Options', 'DENY'); next(); });
 app.use(express.static('public'));
+
+// Production must never expose workspace APIs anonymously. This is a
+// single-workspace bearer-token gate, not yet a multi-tenant identity system.
+const API_TOKEN = process.env.ADMIN_API_TOKEN || '';
+if (process.env.NODE_ENV === 'production' && API_TOKEN.length < 32) {
+  throw new Error('Production requires ADMIN_API_TOKEN with at least 32 characters.');
+}
+function constantTimeTokenMatch(candidate, expected) {
+  const a = Buffer.from(String(candidate || ''));
+  const b = Buffer.from(String(expected || ''));
+  return a.length === b.length && a.length > 0 && require('crypto').timingSafeEqual(a, b);
+}
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (!API_TOKEN && process.env.NODE_ENV !== 'production') return next();
+  const header = req.get('authorization') || '';
+  const candidate = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!constantTimeTokenMatch(candidate, API_TOKEN)) {
+    res.set('WWW-Authenticate', 'Bearer realm="Estate AI Agent CRM"');
+    return res.status(401).json({ error: 'Authentication required', code: 'AUTH_REQUIRED' });
+  }
+  next();
+});
 
 // ---------- data layer (seed + JSON file persistence where available) ----------
 const demoSeed = {
@@ -44,7 +69,7 @@ const limited = (ip) => { const now = Date.now(); const a = (hits.get(ip) || [])
 app.use((req, res, next) => { if (req.path !== '/health' && limited(req.ip || 'x')) return res.status(429).json({ error: 'Too many requests' }); next(); });
 
 // ---------- API ----------
-app.get('/health', (req, res) => res.json({ ok: true, service: 'estate-ai-agent-crm', storage: store.name(), ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }));
+app.get('/health', (req, res) => { const ready = store.name() === 'mongo' || process.env.NODE_ENV !== 'production'; res.status(ready ? 200 : 503).json({ ok: ready, service: 'estate-ai-agent-crm', storage: store.name(), authentication: API_TOKEN ? 'enabled' : 'development-only', ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }); });
 
 app.get('/api/inboxes', (req, res) => res.json(DB.inboxes));
 app.post('/api/inboxes', (req, res) => {
