@@ -112,6 +112,34 @@ textarea{min-width:100%;resize:vertical}
   .mem{grid-template-columns:1fr}.logline{grid-template-columns:1fr;gap:5px}
 }
 </style>
+<style id="premium-refresh">
+:root{--bg:#080d16;--surface:#101827;--surface-2:#172236;--line:#26354b;--line-soft:#1b283b;--ink:#f4f7fb;--ink-2:#c2ccda;--dim:#8291a7;--accent:#d6b45a;--accent-soft:#d6b45a20;--green:#49d6a0;--amber:#f0bb57;--red:#f17c78;--blue:#77b8f1;--r:16px}
+body{background:radial-gradient(ellipse at 80% -10%,#1b2a42 0,transparent 42%),var(--bg);letter-spacing:.005em}
+.sidebar{background:rgba(13,20,33,.96);border-color:#26344a;box-shadow:8px 0 40px #00000016}
+.brand{padding:26px 20px}.mark{width:42px;height:42px;border-radius:13px;box-shadow:0 6px 24px #d6b45a20}
+.brand h1{font-size:15px;letter-spacing:-.25px}.brand p{letter-spacing:1.4px}
+nav{padding:20px 12px}nav a{padding:12px 13px;border-radius:11px;font-size:13px;transition:all .18s ease}nav a.active{background:linear-gradient(100deg,#d6b45a20,#d6b45a08);box-shadow:inset 3px 0 var(--accent);color:#f7df9a}nav a:hover{transform:translateX(2px)}
+.side-foot{gap:10px}.dot{box-shadow:0 0 0 4px #49d6a015}
+.topbar{height:72px;padding:0 36px;background:#080d16d9;border-color:var(--line-soft)}
+.crumb{letter-spacing:.01em}.pill{padding:7px 12px;border-radius:10px;background:#111a29}
+.content{max-width:1380px;padding:36px 38px 64px}
+.head{margin-bottom:27px}.head h2{font-size:27px;letter-spacing:-.7px;font-weight:720}.head p{font-size:14px;line-height:1.7;color:#9aa9bc;margin-top:8px}
+.stats{gap:15px;margin-bottom:28px}.stat{position:relative;overflow:hidden;background:linear-gradient(145deg,#141f31,#101827 70%);border:1px solid #26364c;border-radius:16px;padding:20px 21px;box-shadow:0 10px 30px #0000000b;transition:transform .18s,border-color .18s}.stat:hover{transform:translateY(-2px);border-color:#465873}.stat:after{content:"";position:absolute;width:80px;height:80px;right:-35px;top:-35px;border-radius:50%;background:#d6b45a0a}.stat .k{font-size:10px;letter-spacing:1.25px;font-weight:750}.stat .v{font-size:31px;letter-spacing:-1px;margin-top:10px}.stat .s{margin-top:4px}
+.cards{gap:13px}.card{background:linear-gradient(145deg,#121c2b,#0f1725);border-color:#26354a;border-radius:16px;padding:20px 22px;box-shadow:0 8px 28px #0000000b}.card:hover{border-color:#435570;background:linear-gradient(145deg,#152135,#101a2a)}
+.avatar{width:43px;height:43px;border-radius:13px;font-size:12px;background:linear-gradient(145deg,#d6b45a28,#d6b45a0a)}
+.who{font-size:14px}.msg{line-height:1.7;font-size:13.5px}.meta{gap:10px}
+.badge{border-radius:7px;padding:4px 9px;font-size:9px;letter-spacing:.8px}
+.logwrap{border-radius:16px;border-color:#26354a;background:#101827}.logline{padding:15px 20px;border-color:#1d293b}.logline:hover{background:#172236}
+form{border-radius:16px;border-color:#26354a;background:#111a29;padding:19px;margin-top:20px}
+input,textarea,select{border-radius:10px;background:#0b1220;border-color:#2b3b52;padding:12px 13px}input:focus,textarea:focus,select:focus{box-shadow:0 0 0 3px #d6b45a15}
+button{border-radius:10px;padding:10px 16px;background:linear-gradient(135deg,#e5c76f,#c6a03e);box-shadow:0 4px 14px #d6b45a18}button.ghost{box-shadow:none;background:#131e2e}
+.empty{padding:45px 25px;border-radius:15px;background:#0d1522;border-color:#2a3a50}.empty b{font-size:14px;margin-bottom:7px}
+#workspace-auth{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+#workspace-auth input{min-width:150px;max-width:210px;padding:8px 10px;font-size:12px}
+#auth-status{font-size:11px;color:var(--dim);white-space:nowrap}
+@media(max-width:880px){.topbar{padding:0 16px;gap:10px;flex-wrap:wrap;height:auto;min-height:64px;padding-top:10px;padding-bottom:10px}.content{padding:23px 15px 40px}.head h2{font-size:24px}.sidebar{border-bottom:1px solid var(--line)}nav a{white-space:nowrap}.brand{padding:6px 8px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
 </head>
 <body>
 <aside class="sidebar">
@@ -146,6 +174,7 @@ textarea{min-width:100%;resize:vertical}
     <div class="spacer"></div>
     <span class="pill"><span class="live"></span>Monitoring</span>
     <span class="pill" id="clock"></span>
+    <div id="workspace-auth"><input id="api-token" type="password" autocomplete="current-password" placeholder="Workspace access token" aria-label="Workspace access token"><button id="connect-workspace" type="button">Connect</button><span id="auth-status" role="status">Development mode</span></div>
   </header>
 
   <div class="content">
@@ -221,7 +250,33 @@ const ago = (iso) => {
 const initials = (name) => String(name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const sevClass = (s) => 's-' + String(s || 'info').toLowerCase().replace(/[^a-z_]/g, '');
 
-async function jget(path) { const r = await fetch(path); if (!r.ok) throw new Error(path); return r.json(); }
+// Workspace token is held only for this browser tab. In production, provision
+// ADMIN_API_TOKEN out-of-band; never paste secrets into URLs or commit them.
+const tokenKey = 'estate-crm-session-token';
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const url = typeof input === 'string' ? input : input.url;
+  const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+  const token = sessionStorage.getItem(tokenKey);
+  if (url && url.startsWith('/api/') && token) headers.set('Authorization', 'Bearer ' + token);
+  return originalFetch(input, { ...init, headers });
+};
+const tokenInput = $('#api-token');
+const authStatus = $('#auth-status');
+if (sessionStorage.getItem(tokenKey)) { tokenInput.value = sessionStorage.getItem(tokenKey); authStatus.textContent = 'Token saved in this tab'; }
+$('#connect-workspace').onclick = async () => {
+  const token = tokenInput.value.trim();
+  if (!token) { sessionStorage.removeItem(tokenKey); authStatus.textContent = 'Token cleared'; loadInboxes(); loadMems(); loadLogs(); return; }
+  sessionStorage.setItem(tokenKey, token);
+  try {
+    const r = await originalFetch('/api/inboxes', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 401) { sessionStorage.removeItem(tokenKey); authStatus.textContent = 'Access denied'; return; }
+    if (!r.ok) throw new Error('Workspace unavailable');
+    authStatus.textContent = 'Workspace connected';
+    loadInboxes(); loadMems(); loadLogs();
+  } catch { authStatus.textContent = 'Could not connect'; }
+};
+async function jget(path) { const r = await fetch(path); if (!r.ok) { if(r.status===401) authStatus.textContent='Authentication required'; throw new Error(path); } return r.json(); }
 
 async function loadInboxes() {
   try {
