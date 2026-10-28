@@ -366,13 +366,24 @@ async function loadProperties() {
             <select data-property-status="${esc(p.id)}" aria-label="Change status for ${esc(p.title)}">
               <option value="draft" ${p.status==='draft'?'selected':''}>Draft</option><option value="available" ${p.status==='available'?'selected':''}>Available</option><option value="held" ${p.status==='held'?'selected':''}>On hold</option><option value="let" ${p.status==='let'?'selected':''}>Let</option>
             </select><button class="ghost" data-property-save="${esc(p.id)}">Save status</button>
+            ${p.status === 'available' && !p.verifiedAt ? '<button data-property-verify="'+esc(p.id)+'">Record verification</button>' : ''}
           </div>
         </div></div>
       </div>`).join('') : '<div class="empty"><b>No property records yet</b>Add your first listing. Availability stays unverified until a team member records evidence.</div>';
     document.querySelectorAll('[data-property-save]').forEach(b => b.onclick = async () => {
       const id = b.dataset.propertySave; const select = document.querySelector('[data-property-status="'+CSS.escape(id)+'"]');
-      try { const res = await fetch('/api/properties/'+encodeURIComponent(id), {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:select.value})}); if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || 'Could not update listing'); loadProperties(); loadLogs(); }
+      try { const res = await fetch('/api/properties/'+encodeURIComponent(id), {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:select.value})}); if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || 'Could not update listing'); await loadProperties(); loadLogs(); }
       catch(e) { alert(e.message); }
+    });
+    document.querySelectorAll('[data-property-verify]').forEach(b => b.onclick = async () => {
+      const note = prompt('What did you check, and when? Include the source of confirmation (minimum 8 characters).');
+      if (note === null) return;
+      try {
+        const res = await fetch('/api/properties/'+encodeURIComponent(b.dataset.propertyVerify)+'/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verificationNote:note})});
+        const data = await res.json().catch(()=>({}));
+        if(!res.ok) throw new Error(data.error || 'Could not record verification');
+        await loadProperties(); loadLogs();
+      } catch(e) { alert(e.message); }
     });
   } catch(e) { $('#properties').innerHTML = '<div class="empty"><b>Could not load property inventory</b>Connect to the workspace and retry.</div>'; }
 }
