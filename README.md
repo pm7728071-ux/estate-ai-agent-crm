@@ -2,7 +2,7 @@
 
 Autonomous real estate AI agent dashboard: **Live Inboxes**, **Agent Memory Bank**, **System Action Logs**.
 
-Built as part of a 60-day evaluation-to-evidence program (started 2026-10-24). Free tier throughout: Node/Express, JSON persistence, no paid services.
+Status: evaluation prototype, **not yet production-ready for real customer data**. See [the production readiness gate](docs/PRODUCTION_READINESS.md) before deploying to a live agency. The `production-hardening` branch contains initial webhook hardening and CI checks; these do not complete the full release gate.
 
 ## Run locally
 ```bash
@@ -32,8 +32,7 @@ Set these in Render → Environment, then paste the webhook URL into the Meta ap
 | `WHATSAPP_VERIFY_TOKEN` | Any string you choose; enter the same value in Meta's webhook setup |
 | `WHATSAPP_TOKEN` | Meta permanent access token (System User) |
 | `WHATSAPP_PHONE_NUMBER_ID` | The phone number ID from Meta → WhatsApp → API Setup |
-| `WHATSAPP_APP_SECRET` | Optional; enables X-Hub-Signature-256 verification |
+| `WHATSAPP_APP_SECRET` | Required in production; validates X-Hub-Signature-256 |
 
 Callback URL: `https://estate-ai-agent-crm.onrender.com/webhook/whatsapp`
-Subscribe to the **messages** field. Without the token vars the webhook still accepts
-messages and logs them; replies start flowing as soon as the tokens are set.
+Subscribe to the **messages** field. Configure the app secret and credentials before enabling production traffic. In production, requests without a valid signature are rejected. Webhook deduplication is currently in-memory and is not sufficient for multi-instance or restart-safe exactly-once processing. Do not process real customer data until authentication, tenant isolation, durable storage, and the remaining release gates in `docs/PRODUCTION_READINESS.md` are complete.
