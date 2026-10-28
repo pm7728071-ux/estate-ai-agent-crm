@@ -57,16 +57,32 @@ let DB = null;
 const save = () => store.save();
 const log = (severity, message) => { DB.logs.unshift({ id: 'log-' + Date.now() + '-' + Math.floor(Math.random() * 999), ts: new Date().toISOString(), severity, message }); save(); };
 
+// Rate limiting must be mounted BEFORE API routes. Keep the in-memory limiter
+// intentionally modest; multi-instance production needs a shared rate-limit store.
+const hits = new Map();
+let requestsSincePrune = 0;
+app.use('/api', (req, res, next) => {
+  const now = Date.now();
+  const ip = req.ip || 'unknown';
+  let entry = hits.get(ip);
+  if (!entry || now - entry.start >= 60000) entry = { start: now, count: 0 };
+  entry.count += 1;
+  hits.set(ip, entry);
+  requestsSincePrune += 1;
+  if (requestsSincePrune >= 100) {
+    requestsSincePrune = 0;
+    for (const [key, value] of hits) if (now - value.start >= 60000) hits.delete(key);
+    if (hits.size > 5000) hits.clear();
+  }
+  if (entry.count > 60) return res.status(429).json({ error: 'Too many requests', code: 'RATE_LIMITED' });
+  next();
+});
+
 // Mount the agent loop before routes below; lazy DB getter means storage init can fill DB later.
 require('./agent.js')({ app, getDB: () => DB, save, log });
 
 // WhatsApp Cloud API webhook (Meta) — mounts /webhook/whatsapp
 require('./whatsapp.js')({ app, log });
-
-// ---------- simple rate limiting ----------
-const hits = new Map();
-const limited = (ip) => { const now = Date.now(); const a = (hits.get(ip) || []).filter(t => now - t < 60000); a.push(now); hits.set(ip, a); return a.length > 60; };
-app.use((req, res, next) => { if (req.path !== '/health' && limited(req.ip || 'x')) return res.status(429).json({ error: 'Too many requests' }); next(); });
 
 // ---------- API ----------
 app.get('/health', (req, res) => { const ready = store.name() === 'mongo' || process.env.NODE_ENV !== 'production'; res.status(ready ? 200 : 503).json({ ok: ready, service: 'estate-ai-agent-crm', storage: store.name(), authentication: API_TOKEN ? 'enabled' : 'development-only', ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }); });
@@ -85,9 +101,9 @@ app.post('/api/properties', (req, res) => {
   const property = {
     id: 'prop-' + require('crypto').randomUUID(),
     title, area, rent, currency: 'KES', bedrooms,
-    status: ['available', 'held', 'let', 'draft'].includes(b.status) ? b.status : 'draft',
+    status: ['held', 'let'].includes(b.status) ? b.status : 'draft',
     verificationNote: String(b.verificationNote || '').trim().slice(0, 300),
-    verifiedAt: b.status === 'available' && b.verificationNote ? new Date().toISOString() : null,
+    verifiedAt: null,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   };
   DB.properties = DB.properties || [];
@@ -102,12 +118,26 @@ app.patch('/api/properties/:id', (req, res) => {
   if (b.status !== undefined) {
     if (!['available', 'held', 'let', 'draft'].includes(b.status)) return res.status(400).json({ error: 'Invalid property status' });
     item.status = b.status;
-    item.verifiedAt = b.status === 'available' && String(b.verificationNote || item.verificationNote || '').trim() ? new Date().toISOString() : null;
+    // Changing status invalidates the previous availability check. Verification is explicit.
+    item.verifiedAt = null;
   }
   if (b.verificationNote !== undefined) item.verificationNote = String(b.verificationNote).trim().slice(0, 300);
   item.updatedAt = new Date().toISOString(); save();
   log('INFO', 'Property record updated: ' + item.title + ' (' + item.status + ').');
   res.json(item);
+});
+app.post('/api/properties/:id/verify', (req, res) => {
+  const item = (DB.properties || []).find(p => p.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Property not found' });
+  if (item.status !== 'available') return res.status(409).json({ error: 'Set status to available before recording verification' });
+  const note = String((req.body || {}).verificationNote || '').trim().slice(0, 300);
+  if (note.length < 8) return res.status(400).json({ error: 'Provide a verification note of at least 8 characters' });
+  item.verificationNote = note;
+  item.verifiedAt = new Date().toISOString();
+  item.updatedAt = item.verifiedAt;
+  save();
+  log('INFO', 'Availability verification recorded for property ' + item.id + '.');
+  res.json({ ok: true, property: item });
 });
 
 app.get('/api/approvals', (req, res) => res.json(DB.approvals || []));
@@ -156,7 +186,7 @@ app.post('/api/memories', (req, res) => {
 const resetGuard = (req, res, next) => {
   const expected = process.env.ADMIN_RESET_TOKEN;
   if (!expected) return res.status(503).json({ error: 'ADMIN_RESET_TOKEN not configured' });
-  const given = req.get('x-admin-token') || req.query.token || '';
+  const given = req.get('x-admin-token') || '';
   if (given !== expected) return res.status(403).json({ error: 'Forbidden' });
   next();
 };
