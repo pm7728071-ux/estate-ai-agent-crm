@@ -21,7 +21,7 @@ async function call(method, path, body) {
   try {
     const r = await fetch(BASE + path, {
       method, signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(process.env.ADMIN_API_TOKEN ? { Authorization: 'Bearer ' + process.env.ADMIN_API_TOKEN } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const txt = await r.text();
