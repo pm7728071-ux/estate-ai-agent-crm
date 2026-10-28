@@ -50,7 +50,7 @@ const demoSeed = {
 };
 // Production starts empty. Set DEMO_SEED=1 to load the demonstration dataset
 // (also preserved for reference at /evidence.html).
-const seed = process.env.DEMO_SEED === '1' ? demoSeed : { inboxes: [], memories: [], logs: [] };
+const seed = process.env.DEMO_SEED === '1' ? { ...demoSeed, properties: [], approvals: [] } : { inboxes: [], memories: [], logs: [], properties: [], approvals: [] };
 const { createStore } = require('./store.js');
 const store = createStore(seed);
 let DB = null;
@@ -70,6 +70,58 @@ app.use((req, res, next) => { if (req.path !== '/health' && limited(req.ip || 'x
 
 // ---------- API ----------
 app.get('/health', (req, res) => { const ready = store.name() === 'mongo' || process.env.NODE_ENV !== 'production'; res.status(ready ? 200 : 503).json({ ok: ready, service: 'estate-ai-agent-crm', storage: store.name(), authentication: API_TOKEN ? 'enabled' : 'development-only', ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }); });
+
+// Verified property inventory. Listing availability is never inferred from demo constants.
+app.get('/api/properties', (req, res) => res.json(DB.properties || []));
+app.post('/api/properties', (req, res) => {
+  const b = req.body || {};
+  const title = String(b.title || '').trim().slice(0, 120);
+  const area = String(b.area || '').trim().slice(0, 80);
+  const rent = Number(b.rent);
+  const bedrooms = Number(b.bedrooms);
+  if (!title || !area || !Number.isFinite(rent) || rent <= 0 || !Number.isInteger(bedrooms) || bedrooms < 0 || bedrooms > 30) {
+    return res.status(400).json({ error: 'title, area, positive monthly rent, and valid bedroom count are required' });
+  }
+  const property = {
+    id: 'prop-' + require('crypto').randomUUID(),
+    title, area, rent, currency: 'KES', bedrooms,
+    status: ['available', 'held', 'let', 'draft'].includes(b.status) ? b.status : 'draft',
+    verificationNote: String(b.verificationNote || '').trim().slice(0, 300),
+    verifiedAt: b.status === 'available' && b.verificationNote ? new Date().toISOString() : null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  };
+  DB.properties = DB.properties || [];
+  DB.properties.unshift(property); save();
+  log('INFO', 'Property record created: ' + property.title + ' (' + property.status + ').');
+  res.status(201).json(property);
+});
+app.patch('/api/properties/:id', (req, res) => {
+  const item = (DB.properties || []).find(p => p.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Property not found' });
+  const b = req.body || {};
+  if (b.status !== undefined) {
+    if (!['available', 'held', 'let', 'draft'].includes(b.status)) return res.status(400).json({ error: 'Invalid property status' });
+    item.status = b.status;
+    item.verifiedAt = b.status === 'available' && String(b.verificationNote || item.verificationNote || '').trim() ? new Date().toISOString() : null;
+  }
+  if (b.verificationNote !== undefined) item.verificationNote = String(b.verificationNote).trim().slice(0, 300);
+  item.updatedAt = new Date().toISOString(); save();
+  log('INFO', 'Property record updated: ' + item.title + ' (' + item.status + ').');
+  res.json(item);
+});
+
+app.get('/api/approvals', (req, res) => res.json(DB.approvals || []));
+app.post('/api/approvals/:id/decision', (req, res) => {
+  const item = (DB.approvals || []).find(a => a.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Approval not found' });
+  if (item.status !== 'pending') return res.status(409).json({ error: 'Approval already decided' });
+  const decision = req.body && req.body.decision;
+  if (!['approved', 'rejected'].includes(decision)) return res.status(400).json({ error: 'decision must be approved or rejected' });
+  item.status = decision; item.decidedAt = new Date().toISOString();
+  item.decisionNote = String(req.body.note || '').slice(0, 300);
+  log('APPROVAL', 'Approval ' + item.id + ' was ' + decision + '. No external action is automatically executed.');
+  save(); res.json({ ok: true, approval: item, externalActionExecuted: false });
+});
 
 app.get('/api/inboxes', (req, res) => res.json(DB.inboxes));
 app.post('/api/inboxes', (req, res) => {
