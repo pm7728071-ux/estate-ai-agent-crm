@@ -14,6 +14,7 @@ npm install && npm start   # http://localhost:3000
 - `GET/POST /api/inboxes` — client conversations
 - `GET/POST /api/memories` — client/property/policy memory
 - `GET/POST/PATCH /api/properties` — listing inventory and status
+- `POST /api/properties/:id/verify` — explicit availability verification with a dated evidence note
 - `GET /api/approvals`, `POST /api/approvals/:id/decision` — human review queue
 - `GET /api/logs` — action log
 
