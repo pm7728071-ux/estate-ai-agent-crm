@@ -112,6 +112,34 @@ textarea{min-width:100%;resize:vertical}
   .mem{grid-template-columns:1fr}.logline{grid-template-columns:1fr;gap:5px}
 }
 </style>
+<style id="premium-refresh">
+:root{--bg:#080d16;--surface:#101827;--surface-2:#172236;--line:#26354b;--line-soft:#1b283b;--ink:#f4f7fb;--ink-2:#c2ccda;--dim:#8291a7;--accent:#d6b45a;--accent-soft:#d6b45a20;--green:#49d6a0;--amber:#f0bb57;--red:#f17c78;--blue:#77b8f1;--r:16px}
+body{background:radial-gradient(ellipse at 80% -10%,#1b2a42 0,transparent 42%),var(--bg);letter-spacing:.005em}
+.sidebar{background:rgba(13,20,33,.96);border-color:#26344a;box-shadow:8px 0 40px #00000016}
+.brand{padding:26px 20px}.mark{width:42px;height:42px;border-radius:13px;box-shadow:0 6px 24px #d6b45a20}
+.brand h1{font-size:15px;letter-spacing:-.25px}.brand p{letter-spacing:1.4px}
+nav{padding:20px 12px}nav a{padding:12px 13px;border-radius:11px;font-size:13px;transition:all .18s ease}nav a.active{background:linear-gradient(100deg,#d6b45a20,#d6b45a08);box-shadow:inset 3px 0 var(--accent);color:#f7df9a}nav a:hover{transform:translateX(2px)}
+.side-foot{gap:10px}.dot{box-shadow:0 0 0 4px #49d6a015}
+.topbar{height:72px;padding:0 36px;background:#080d16d9;border-color:var(--line-soft)}
+.crumb{letter-spacing:.01em}.pill{padding:7px 12px;border-radius:10px;background:#111a29}
+.content{max-width:1380px;padding:36px 38px 64px}
+.head{margin-bottom:27px}.head h2{font-size:27px;letter-spacing:-.7px;font-weight:720}.head p{font-size:14px;line-height:1.7;color:#9aa9bc;margin-top:8px}
+.stats{gap:15px;margin-bottom:28px}.stat{position:relative;overflow:hidden;background:linear-gradient(145deg,#141f31,#101827 70%);border:1px solid #26364c;border-radius:16px;padding:20px 21px;box-shadow:0 10px 30px #0000000b;transition:transform .18s,border-color .18s}.stat:hover{transform:translateY(-2px);border-color:#465873}.stat:after{content:"";position:absolute;width:80px;height:80px;right:-35px;top:-35px;border-radius:50%;background:#d6b45a0a}.stat .k{font-size:10px;letter-spacing:1.25px;font-weight:750}.stat .v{font-size:31px;letter-spacing:-1px;margin-top:10px}.stat .s{margin-top:4px}
+.cards{gap:13px}.card{background:linear-gradient(145deg,#121c2b,#0f1725);border-color:#26354a;border-radius:16px;padding:20px 22px;box-shadow:0 8px 28px #0000000b}.card:hover{border-color:#435570;background:linear-gradient(145deg,#152135,#101a2a)}
+.avatar{width:43px;height:43px;border-radius:13px;font-size:12px;background:linear-gradient(145deg,#d6b45a28,#d6b45a0a)}
+.who{font-size:14px}.msg{line-height:1.7;font-size:13.5px}.meta{gap:10px}
+.badge{border-radius:7px;padding:4px 9px;font-size:9px;letter-spacing:.8px}
+.logwrap{border-radius:16px;border-color:#26354a;background:#101827}.logline{padding:15px 20px;border-color:#1d293b}.logline:hover{background:#172236}
+form{border-radius:16px;border-color:#26354a;background:#111a29;padding:19px;margin-top:20px}
+input,textarea,select{border-radius:10px;background:#0b1220;border-color:#2b3b52;padding:12px 13px}input:focus,textarea:focus,select:focus{box-shadow:0 0 0 3px #d6b45a15}
+button{border-radius:10px;padding:10px 16px;background:linear-gradient(135deg,#e5c76f,#c6a03e);box-shadow:0 4px 14px #d6b45a18}button.ghost{box-shadow:none;background:#131e2e}
+.empty{padding:45px 25px;border-radius:15px;background:#0d1522;border-color:#2a3a50}.empty b{font-size:14px;margin-bottom:7px}
+#workspace-auth{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+#workspace-auth input{min-width:150px;max-width:210px;padding:8px 10px;font-size:12px}
+#auth-status{font-size:11px;color:var(--dim);white-space:nowrap}
+@media(max-width:880px){.topbar{padding:0 16px;gap:10px;flex-wrap:wrap;height:auto;min-height:64px;padding-top:10px;padding-bottom:10px}.content{padding:23px 15px 40px}.head h2{font-size:24px}.sidebar{border-bottom:1px solid var(--line)}nav a{white-space:nowrap}.brand{padding:6px 8px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style>
 </head>
 <body>
 <aside class="sidebar">
@@ -127,6 +155,14 @@ textarea{min-width:100%;resize:vertical}
     <a href="#inboxes" class="active" data-v="inboxes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
       <span class="lbl">Live Inboxes</span><span class="count" id="c-inbox"></span>
+    </a>
+    <a href="#properties" data-v="properties">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 9h.01M15 9h.01"/></svg>
+      <span class="lbl">Properties</span><span class="count" id="c-properties"></span>
+    </a>
+    <a href="#approvals" data-v="approvals">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span class="lbl">Approvals</span><span class="count" id="c-approvals"></span>
     </a>
     <a href="#memories" data-v="memories">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7z"/><path d="M9 21h6"/></svg>
@@ -146,6 +182,7 @@ textarea{min-width:100%;resize:vertical}
     <div class="spacer"></div>
     <span class="pill"><span class="live"></span>Monitoring</span>
     <span class="pill" id="clock"></span>
+    <div id="workspace-auth"><input id="api-token" type="password" autocomplete="current-password" placeholder="Workspace access token" aria-label="Workspace access token"><button id="connect-workspace" type="button">Connect</button><span id="auth-status" role="status">Development mode</span></div>
   </header>
 
   <div class="content">
@@ -170,6 +207,41 @@ textarea{min-width:100%;resize:vertical}
           <span class="err" id="e-inbox"></span>
         </div>
       </form>
+    </section>
+
+    <section id="view-properties" class="view">
+      <div class="head">
+        <h2>Property inventory</h2>
+        <p>One source of truth for listings. Only mark a property available when a team member has verified its current status and recorded a note.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Total listings</div><div class="v" id="s-properties">—</div><div class="s">in this workspace</div></div>
+        <div class="stat"><div class="k">Verified available</div><div class="v" id="s-available">—</div><div class="s">availability has a recorded check</div></div>
+      </div>
+      <div class="cards" id="properties"></div>
+      <form id="f-property">
+        <input id="p-title" placeholder="Listing title (e.g. 2BR apartment)" required maxlength="120">
+        <input id="p-area" placeholder="Area / neighbourhood" required maxlength="80">
+        <input id="p-rent" type="number" min="1" step="1" placeholder="Monthly rent (KES)" required>
+        <input id="p-beds" type="number" min="0" max="30" step="1" placeholder="Bedrooms (0 for office)" required>
+        <select id="p-status" aria-label="Listing status"><option value="draft">Draft / unverified</option><option value="available">Available (requires verification note)</option><option value="held">On hold</option><option value="let">Let / unavailable</option></select>
+        <textarea id="p-note" placeholder="Verification note — who checked, and what did they confirm?" rows="2"></textarea>
+        <div style="display:flex;gap:9px;align-items:center;width:100%;flex-wrap:wrap">
+          <button type="submit">Add property</button><span class="err" id="e-property"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="view-approvals" class="view">
+      <div class="head">
+        <h2>Human approvals</h2>
+        <p>Review consequential requests before anyone commits. Approving a request records the decision only; it does not send an offer, make a booking, or move money.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Awaiting review</div><div class="v" id="s-pending">—</div><div class="s">requires a human decision</div></div>
+        <div class="stat"><div class="k">Reviewed</div><div class="v" id="s-reviewed">—</div><div class="s">approved or rejected</div></div>
+      </div>
+      <div class="cards" id="approvals"></div>
     </section>
 
     <section id="view-memories" class="view">
@@ -221,7 +293,33 @@ const ago = (iso) => {
 const initials = (name) => String(name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const sevClass = (s) => 's-' + String(s || 'info').toLowerCase().replace(/[^a-z_]/g, '');
 
-async function jget(path) { const r = await fetch(path); if (!r.ok) throw new Error(path); return r.json(); }
+// Workspace token is held only for this browser tab. In production, provision
+// ADMIN_API_TOKEN out-of-band; never paste secrets into URLs or commit them.
+const tokenKey = 'estate-crm-session-token';
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const url = typeof input === 'string' ? input : input.url;
+  const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+  const token = sessionStorage.getItem(tokenKey);
+  if (url && url.startsWith('/api/') && token) headers.set('Authorization', 'Bearer ' + token);
+  return originalFetch(input, { ...init, headers });
+};
+const tokenInput = $('#api-token');
+const authStatus = $('#auth-status');
+if (sessionStorage.getItem(tokenKey)) { tokenInput.value = sessionStorage.getItem(tokenKey); authStatus.textContent = 'Token saved in this tab'; }
+$('#connect-workspace').onclick = async () => {
+  const token = tokenInput.value.trim();
+  if (!token) { sessionStorage.removeItem(tokenKey); authStatus.textContent = 'Token cleared'; loadInboxes(); loadMems(); loadLogs(); return; }
+  sessionStorage.setItem(tokenKey, token);
+  try {
+    const r = await originalFetch('/api/inboxes', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 401) { sessionStorage.removeItem(tokenKey); authStatus.textContent = 'Access denied'; return; }
+    if (!r.ok) throw new Error('Workspace unavailable');
+    authStatus.textContent = 'Workspace connected';
+    loadInboxes(); loadMems(); loadLogs(); loadProperties(); loadApprovals();
+  } catch { authStatus.textContent = 'Could not connect'; }
+};
+async function jget(path) { const r = await fetch(path); if (!r.ok) { if(r.status===401) authStatus.textContent='Authentication required'; throw new Error(path); } return r.json(); }
 
 async function loadInboxes() {
   try {
@@ -250,6 +348,74 @@ async function loadInboxes() {
     document.querySelectorAll('[data-reply]').forEach(b => b.onclick = () => reply(b.dataset.reply));
   } catch (e) { $('#inboxes').innerHTML = `<div class="empty"><b>Could not load inboxes</b>The service may be waking up — refresh in a moment.</div>`; }
 }
+
+async function loadProperties() {
+  try {
+    const rows = await jget('/api/properties');
+    const available = rows.filter(p => p.status === 'available' && p.verifiedAt && p.verificationNote);
+    $('#s-properties').textContent = rows.length;
+    $('#s-available').textContent = available.length;
+    $('#c-properties').textContent = rows.length || '';
+    $('#properties').innerHTML = rows.length ? rows.map(p => `
+      <div class="card">
+        <div class="row"><div class="avatar">⌂</div><div style="flex:1;min-width:0">
+          <div class="who">${esc(p.title)} <span class="badge ${p.status === 'available' && p.verifiedAt && p.verificationNote ? 'b-responded' : p.status === 'held' ? 'b-escalated' : 'b-new'}">${esc(p.status)}</span></div>
+          <div class="prop">${esc(p.area)} · ${Number(p.bedrooms)} bedrooms · KES ${Number(p.rent).toLocaleString('en-KE')}/month</div>
+          <div class="msg">${esc(p.verificationNote || 'No verification note recorded. Do not describe this listing as verified.')}</div>
+          <div class="meta"><span>${p.verifiedAt ? 'Verified ' + new Date(p.verifiedAt).toLocaleString() : 'Not verified'}</span><span>Updated ${new Date(p.updatedAt || p.createdAt).toLocaleDateString()}</span>
+            <select data-property-status="${esc(p.id)}" aria-label="Change status for ${esc(p.title)}">
+              <option value="draft" ${p.status==='draft'?'selected':''}>Draft</option><option value="available" ${p.status==='available'?'selected':''}>Available</option><option value="held" ${p.status==='held'?'selected':''}>On hold</option><option value="let" ${p.status==='let'?'selected':''}>Let</option>
+            </select><button class="ghost" data-property-save="${esc(p.id)}">Save status</button>
+            ${p.status === 'available' && !p.verifiedAt ? '<button data-property-verify="'+esc(p.id)+'">Record verification</button>' : ''}
+          </div>
+        </div></div>
+      </div>`).join('') : '<div class="empty"><b>No property records yet</b>Add your first listing. Availability stays unverified until a team member records evidence.</div>';
+    document.querySelectorAll('[data-property-save]').forEach(b => b.onclick = async () => {
+      const id = b.dataset.propertySave; const select = document.querySelector('[data-property-status="'+CSS.escape(id)+'"]');
+      try { const res = await fetch('/api/properties/'+encodeURIComponent(id), {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:select.value})}); if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || 'Could not update listing'); await loadProperties(); loadLogs(); }
+      catch(e) { alert(e.message); }
+    });
+    document.querySelectorAll('[data-property-verify]').forEach(b => b.onclick = async () => {
+      const note = prompt('What did you check, and when? Include the source of confirmation (minimum 8 characters).');
+      if (note === null) return;
+      try {
+        const res = await fetch('/api/properties/'+encodeURIComponent(b.dataset.propertyVerify)+'/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verificationNote:note})});
+        const data = await res.json().catch(()=>({}));
+        if(!res.ok) throw new Error(data.error || 'Could not record verification');
+        await loadProperties(); loadLogs();
+      } catch(e) { alert(e.message); }
+    });
+  } catch(e) { $('#properties').innerHTML = '<div class="empty"><b>Could not load property inventory</b>Connect to the workspace and retry.</div>'; }
+}
+async function loadApprovals() {
+  try {
+    const rows = await jget('/api/approvals');
+    const pending = rows.filter(a => a.status === 'pending');
+    $('#s-pending').textContent = pending.length; $('#s-reviewed').textContent = rows.length - pending.length;
+    $('#c-approvals').textContent = pending.length || '';
+    $('#approvals').innerHTML = rows.length ? rows.map(a => `
+      <div class="card"><div class="who">${esc(a.action)} <span class="badge ${a.status==='pending'?'b-new':a.status==='approved'?'b-responded':'b-escalated'}">${esc(a.status)}</span></div>
+      <div class="prop">Request ${esc(a.id)} · ${new Date(a.createdAt).toLocaleString()}</div><div class="msg">${esc(a.summary)}</div>
+      <div class="meta"><span>Requester: ${esc(a.requester)}</span>${a.status==='pending' ? '<button data-decision="approved" data-approval-id="'+esc(a.id)+'">Approve request</button><button class="ghost" data-decision="rejected" data-approval-id="'+esc(a.id)+'">Reject</button>' : '<span>Decision recorded '+esc(a.decidedAt ? new Date(a.decidedAt).toLocaleString() : '')+'</span>'}</div></div>`).join('') : '<div class="empty"><b>No approval requests</b>Consequential actions that need review will appear here.</div>';
+    document.querySelectorAll('[data-decision]').forEach(b => b.onclick = async () => {
+      const decision = b.dataset.decision;
+      if (!confirm('Record '+decision+'? This records a decision only; it will not execute an external action.')) return;
+      try { const res = await fetch('/api/approvals/'+encodeURIComponent(b.dataset.approvalId)+'/decision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision})}); if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || 'Could not record decision'); loadApprovals(); loadLogs(); }
+      catch(e) { alert(e.message); }
+    });
+  } catch(e) { $('#approvals').innerHTML = '<div class="empty"><b>Could not load approvals</b>Connect to the workspace and retry.</div>'; }
+}
+$('#f-property').onsubmit = async (e) => {
+  e.preventDefault(); $('#e-property').style.display='none';
+  const body = {title:$('#p-title').value,area:$('#p-area').value,rent:Number($('#p-rent').value),bedrooms:Number($('#p-beds').value),status:$('#p-status').value,verificationNote:$('#p-note').value};
+  try {
+    const res = await fetch('/api/properties',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || 'Could not add property');
+    ['p-title','p-area','p-rent','p-beds','p-note'].forEach(id => $('#'+id).value='');
+    $('#p-status').value='draft'; loadProperties(); loadLogs();
+  } catch(err) { $('#e-property').textContent=err.message; $('#e-property').style.display='block'; }
+};
 
 async function loadMems() {
   try {
@@ -319,7 +485,7 @@ $('#f-mem').onsubmit = async (e) => {
   } catch (err) { $('#e-mem').textContent = err.message; $('#e-mem').style.display = 'block'; }
 };
 
-const LABELS = { inboxes: 'Live Inboxes', memories: 'Agent Memory Bank', logs: 'System Action Logs' };
+const LABELS = { inboxes: 'Live Inboxes', properties: 'Property Inventory', approvals: 'Human Approvals', memories: 'Agent Memory Bank', logs: 'System Action Logs' };
 document.querySelectorAll('nav a').forEach(a => a.onclick = (e) => {
   e.preventDefault();
   document.querySelectorAll('nav a').forEach(x => x.classList.remove('active'));
@@ -327,11 +493,13 @@ document.querySelectorAll('nav a').forEach(a => a.onclick = (e) => {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
   $('#view-' + a.dataset.v).classList.add('on');
   $('#crumb').textContent = LABELS[a.dataset.v];
+  if (a.dataset.v === 'properties') loadProperties();
+  if (a.dataset.v === 'approvals') loadApprovals();
 });
 
 const tick = () => { $('#clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
 tick(); setInterval(tick, 30000);
-loadInboxes(); loadMems(); loadLogs();
+loadInboxes(); loadMems(); loadLogs(); loadProperties(); loadApprovals();
 setInterval(() => { loadInboxes(); loadLogs(); }, 60000);
 </script>
 </body>

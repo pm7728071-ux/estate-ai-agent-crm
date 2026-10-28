@@ -3,7 +3,51 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '50kb', verify: (req, res, buf) => { req.rawBody = buf; } }));
+app.disable('x-powered-by');
+app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'strict-origin-when-cross-origin'); res.set('X-Frame-Options', 'DENY'); next(); });
 app.use(express.static('public'));
+
+// Production must never expose workspace APIs anonymously. This is a
+// single-workspace bearer-token gate, not yet a multi-tenant identity system.
+const API_TOKEN = process.env.ADMIN_API_TOKEN || '';
+if (process.env.NODE_ENV === 'production' && API_TOKEN.length < 32) {
+  throw new Error('Production requires ADMIN_API_TOKEN with at least 32 characters.');
+}
+function constantTimeTokenMatch(candidate, expected) {
+  const a = Buffer.from(String(candidate || ''));
+  const b = Buffer.from(String(expected || ''));
+  return a.length === b.length && a.length > 0 && require('crypto').timingSafeEqual(a, b);
+}
+// Apply rate limiting before authentication so failed-token attempts are counted too.
+const hits = new Map();
+let requestsSincePrune = 0;
+app.use('/api', (req, res, next) => {
+  const now = Date.now();
+  const ip = req.ip || 'unknown';
+  let entry = hits.get(ip);
+  if (!entry || now - entry.start >= 60000) entry = { start: now, count: 0 };
+  entry.count += 1;
+  hits.set(ip, entry);
+  requestsSincePrune += 1;
+  if (requestsSincePrune >= 100) {
+    requestsSincePrune = 0;
+    for (const [key, value] of hits) if (now - value.start >= 60000) hits.delete(key);
+    if (hits.size > 5000) hits.clear();
+  }
+  if (entry.count > 60) return res.status(429).json({ error: 'Too many requests', code: 'RATE_LIMITED' });
+  next();
+});
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (!API_TOKEN && process.env.NODE_ENV !== 'production') return next();
+  const header = req.get('authorization') || '';
+  const candidate = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!constantTimeTokenMatch(candidate, API_TOKEN)) {
+    res.set('WWW-Authenticate', 'Bearer realm="Estate AI Agent CRM"');
+    return res.status(401).json({ error: 'Authentication required', code: 'AUTH_REQUIRED' });
+  }
+  next();
+});
 
 // ---------- data layer (seed + JSON file persistence where available) ----------
 const demoSeed = {
@@ -25,7 +69,7 @@ const demoSeed = {
 };
 // Production starts empty. Set DEMO_SEED=1 to load the demonstration dataset
 // (also preserved for reference at /evidence.html).
-const seed = process.env.DEMO_SEED === '1' ? demoSeed : { inboxes: [], memories: [], logs: [] };
+const seed = process.env.DEMO_SEED === '1' ? { ...demoSeed, properties: [], approvals: [] } : { inboxes: [], memories: [], logs: [], properties: [], approvals: [] };
 const { createStore } = require('./store.js');
 const store = createStore(seed);
 let DB = null;
@@ -38,13 +82,74 @@ require('./agent.js')({ app, getDB: () => DB, save, log });
 // WhatsApp Cloud API webhook (Meta) — mounts /webhook/whatsapp
 require('./whatsapp.js')({ app, log });
 
-// ---------- simple rate limiting ----------
-const hits = new Map();
-const limited = (ip) => { const now = Date.now(); const a = (hits.get(ip) || []).filter(t => now - t < 60000); a.push(now); hits.set(ip, a); return a.length > 60; };
-app.use((req, res, next) => { if (req.path !== '/health' && limited(req.ip || 'x')) return res.status(429).json({ error: 'Too many requests' }); next(); });
-
 // ---------- API ----------
-app.get('/health', (req, res) => res.json({ ok: true, service: 'estate-ai-agent-crm', storage: store.name(), ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }));
+app.get('/health', (req, res) => { const ready = store.name() === 'mongo' || process.env.NODE_ENV !== 'production'; res.status(ready ? 200 : 503).json({ ok: ready, service: 'estate-ai-agent-crm', storage: store.name(), authentication: API_TOKEN ? 'enabled' : 'development-only', ...(store.name() !== 'mongo' && store.lastError() ? { storageFallbackReason: store.lastError() } : {}), time: new Date().toISOString() }); });
+
+// Verified property inventory. Listing availability is never inferred from demo constants.
+app.get('/api/properties', (req, res) => res.json(DB.properties || []));
+app.post('/api/properties', (req, res) => {
+  const b = req.body || {};
+  const title = String(b.title || '').trim().slice(0, 120);
+  const area = String(b.area || '').trim().slice(0, 80);
+  const rent = Number(b.rent);
+  const bedrooms = Number(b.bedrooms);
+  if (!title || !area || !Number.isFinite(rent) || rent <= 0 || !Number.isInteger(bedrooms) || bedrooms < 0 || bedrooms > 30) {
+    return res.status(400).json({ error: 'title, area, positive monthly rent, and valid bedroom count are required' });
+  }
+  const property = {
+    id: 'prop-' + require('crypto').randomUUID(),
+    title, area, rent, currency: 'KES', bedrooms,
+    status: ['held', 'let'].includes(b.status) ? b.status : 'draft',
+    verificationNote: String(b.verificationNote || '').trim().slice(0, 300),
+    verifiedAt: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  };
+  DB.properties = DB.properties || [];
+  DB.properties.unshift(property); save();
+  log('INFO', 'Property record created: ' + property.title + ' (' + property.status + ').');
+  res.status(201).json(property);
+});
+app.patch('/api/properties/:id', (req, res) => {
+  const item = (DB.properties || []).find(p => p.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Property not found' });
+  const b = req.body || {};
+  if (b.status !== undefined) {
+    if (!['available', 'held', 'let', 'draft'].includes(b.status)) return res.status(400).json({ error: 'Invalid property status' });
+    item.status = b.status;
+    // Changing status invalidates the previous availability check. Verification is explicit.
+    item.verifiedAt = null;
+  }
+  if (b.verificationNote !== undefined) item.verificationNote = String(b.verificationNote).trim().slice(0, 300);
+  item.updatedAt = new Date().toISOString(); save();
+  log('INFO', 'Property record updated: ' + item.title + ' (' + item.status + ').');
+  res.json(item);
+});
+app.post('/api/properties/:id/verify', (req, res) => {
+  const item = (DB.properties || []).find(p => p.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Property not found' });
+  if (item.status !== 'available') return res.status(409).json({ error: 'Set status to available before recording verification' });
+  const note = String((req.body || {}).verificationNote || '').trim().slice(0, 300);
+  if (note.length < 8) return res.status(400).json({ error: 'Provide a verification note of at least 8 characters' });
+  item.verificationNote = note;
+  item.verifiedAt = new Date().toISOString();
+  item.updatedAt = item.verifiedAt;
+  save();
+  log('INFO', 'Availability verification recorded for property ' + item.id + '.');
+  res.json({ ok: true, property: item });
+});
+
+app.get('/api/approvals', (req, res) => res.json(DB.approvals || []));
+app.post('/api/approvals/:id/decision', (req, res) => {
+  const item = (DB.approvals || []).find(a => a.id === req.params.id);
+  if (!item) return res.status(404).json({ error: 'Approval not found' });
+  if (item.status !== 'pending') return res.status(409).json({ error: 'Approval already decided' });
+  const decision = req.body && req.body.decision;
+  if (!['approved', 'rejected'].includes(decision)) return res.status(400).json({ error: 'decision must be approved or rejected' });
+  item.status = decision; item.decidedAt = new Date().toISOString();
+  item.decisionNote = String(req.body.note || '').slice(0, 300);
+  log('APPROVAL', 'Approval ' + item.id + ' was ' + decision + '. No external action is automatically executed.');
+  save(); res.json({ ok: true, approval: item, externalActionExecuted: false });
+});
 
 app.get('/api/inboxes', (req, res) => res.json(DB.inboxes));
 app.post('/api/inboxes', (req, res) => {
@@ -79,7 +184,7 @@ app.post('/api/memories', (req, res) => {
 const resetGuard = (req, res, next) => {
   const expected = process.env.ADMIN_RESET_TOKEN;
   if (!expected) return res.status(503).json({ error: 'ADMIN_RESET_TOKEN not configured' });
-  const given = req.get('x-admin-token') || req.query.token || '';
+  const given = req.get('x-admin-token') || '';
   if (given !== expected) return res.status(403).json({ error: 'Forbidden' });
   next();
 };

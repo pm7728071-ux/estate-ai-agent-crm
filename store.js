@@ -29,7 +29,7 @@ function createStore(seed) {
         console.log('[storage] MongoDB Atlas connected (' + (process.env.MONGODB_DB || 'estate_crm') + ')');
         return DB;
       } catch (e) {
-        console.error('[storage] Mongo unavailable, falling back to JSON:', e.message);
+        console.error('[storage] Mongo unavailable:', e.message);
         const m = String(e.message || '');
         lastError = /auth/i.test(m) ? 'auth_failed'
           : /ENOTFOUND|dns/i.test(m) ? 'dns'
@@ -37,7 +37,12 @@ function createStore(seed) {
           : /allowlist|not allowed|IP/i.test(m) ? 'ip_not_allowlisted'
           : 'other';
         col = null;
+        if (process.env.NODE_ENV === 'production') {
+          throw new Error('Production requires durable MongoDB storage; refusing JSON fallback.');
+        }
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('Production requires MONGODB_URI; JSON storage is development-only.');
     }
     try { DB = JSON.parse(fs.readFileSync('./data.json', 'utf8')); } catch { DB = JSON.parse(JSON.stringify(seed)); }
     driverName = 'json';
