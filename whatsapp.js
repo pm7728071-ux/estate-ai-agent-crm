@@ -104,7 +104,7 @@ module.exports = function mountWhatsApp({ app, log }) {
         }
         const response = await fetch(`http://127.0.0.1:${PORT}/api/agent/message`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(process.env.ADMIN_API_TOKEN ? { Authorization: 'Bearer ' + process.env.ADMIN_API_TOKEN } : {}) },
           body: JSON.stringify({ from, text: body, channel: 'whatsapp' }),
           signal: AbortSignal.timeout(10000)
         });
