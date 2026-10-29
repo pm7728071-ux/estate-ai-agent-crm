@@ -22,6 +22,7 @@ jobs:
           node --check server.js
           node --check agent.js
           node --check store.js
+          node --check rent-ledger-mongo.js
           node --check whatsapp.js
       - name: Storage regression test
         run: node tests/storage.test.js
