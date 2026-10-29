@@ -4,7 +4,7 @@ const path = require('path');
 const { AsyncLocalStorage } = require('node:async_hooks');
 
 function createStore(seed) {
-  let driverName = 'uninitialised', col = null, client = null, lastError = null;
+  let driverName = 'uninitialised', col = null, client = null, database = null, lastError = null;
   const contexts = new AsyncLocalStorage();
   const tenantDBs = new Map(), timers = new Map(), pending = new Set();
   const emptyState = () => JSON.parse(JSON.stringify(seed));
@@ -52,7 +52,8 @@ function createStore(seed) {
         const { MongoClient } = require('mongodb');
         client = new MongoClient(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000, appName: 'estate-ai-agent-crm' });
         await client.connect();
-        col = client.db(process.env.MONGODB_DB || 'estate_crm').collection('tenant_state');
+        database = client.db(process.env.MONGODB_DB || 'estate_crm');
+        col = database.collection('tenant_state');
         driverName = 'mongo';
         await loadTenant('default');
         console.log('[storage] MongoDB connected with tenant-scoped storage');
@@ -131,6 +132,7 @@ function createStore(seed) {
   }
   return {
     init, save, persistCurrent, runWithTenant, getCurrentDB,
+    getMongoDb: () => database, getMongoClient: () => client,
     get DB() { return tenantDBs.get('default') || null; },
     name: () => driverName, lastError: () => lastError,
     flushAll: async () => { for (const id of [...pending]) await flush(id); },
