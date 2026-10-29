@@ -22,6 +22,7 @@ This document is an operational checklist, not a claim of certification or compl
 - [ ] Complete per-principal rate limits, consistent validation for every route, safe error responses, and audit events that avoid unnecessary personal data.
 - [x] Initial GitHub Actions CI workflow for syntax checks, storage regression test, API token gate, explicit property verification, and approval-queue regression checks.
 - [ ] Add authenticated API/security tests, dependency auditing, backup/restore checks, and a staging deployment.
+- [ ] Configure a registered Aegis agent key in Render, enable `AEGIS_ENFORCE_ACTIONS=true`, and verify the connected action gate in staging before relying on it for consequential actions.
 - [ ] Establish privacy notices, retention/deletion controls, access procedures, incident response, and applicable Kenyan data-protection obligations before processing personal data.
 
 ## Implemented on `production-hardening` (not yet independently validated)
@@ -41,6 +42,13 @@ This document is an operational checklist, not a claim of certification or compl
 - MongoDB tenant records use separate IDs in the `tenant_state` collection. The legacy `db` record is copied only to the `default` tenant; newly configured agency tenants start with empty state.
 - Provision keys out-of-band, provide each agency only its own key, and rotate/revoke keys promptly. This first version uses shared agency-level keys, not per-user identity or role-based access control.
 - **Do not onboard real tenant personal data yet.** Wait until the tenant-isolation tests pass in CI, a staging deployment is verified, and per-user access, privacy/retention/deletion, audit, backups and recovery are reviewed.
+
+## Aegis action guard integration
+
+- The CRM includes an opt-in `aegis-guard.js` client. When enabled, it calls the Aegis `POST /api/guard/action` endpoint for consequential external commitments; network failures, missing credentials, malformed responses, and denials block the action. The current CRM still places commitments in a human approval queue and does not send messages, sign leases, book viewings, or move money automatically.
+- Configure Render secrets only after the Aegis action-guard endpoint is merged and deployed: `AEGIS_GATEWAY_URL=https://aegis-agent-4u79.onrender.com`, `AEGIS_AGENT_API_KEY=<registered Aegis agent key>`, and `AEGIS_ENFORCE_ACTIONS=true`. Never commit or paste the key into source files. Register the integration as its own Aegis agent and rotate/revoke its key if exposed.
+- The gate's `PENDING_APPROVAL` decision is a policy verdict, not an approval token for execution. Any future approval execution endpoint must re-check the policy and independently enforce authorization immediately before the external side effect.
+- Until the Aegis endpoint is merged/deployed and its credential is configured, the CRM integration is present in code but **not active**; the CRM's existing local approval gate remains the only control.
 
 ## Rent ledger release notes
 
