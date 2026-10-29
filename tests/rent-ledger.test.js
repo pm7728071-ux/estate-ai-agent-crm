@@ -13,10 +13,16 @@ async function main(){try{
  assert.deepEqual((await req(TOKENS.a,'/api/tenants')).body,[]);
  let property=await req(TOKENS.a,'/api/properties',{method:'POST',body:JSON.stringify({title:'Ledger Test Flat',area:'Nairobi',rent:30000,bedrooms:2})});assert.equal(property.status,201);
  let tenant=await req(TOKENS.a,'/api/tenants',{method:'POST',body:JSON.stringify({name:'Test Tenant',propertyId:property.body.id,monthlyRent:30000,dueDay:1,leaseStart:'2026-01-01'})});assert.equal(tenant.status,201);
+ let badLease=await req(TOKENS.a,'/api/tenants',{method:'POST',body:JSON.stringify({name:'Bad Date Tenant',propertyId:property.body.id,monthlyRent:30000,dueDay:1,leaseStart:'2026-02-31'})});assert.equal(badLease.status,400,'invalid calendar lease date rejected');
+ let badRent=await req(TOKENS.a,'/api/tenants',{method:'POST',body:JSON.stringify({name:'Rounded Rent Tenant',propertyId:property.body.id,monthlyRent:30000.999,dueDay:1})});assert.equal(badRent.status,400,'rent amount with more than two decimal places rejected');
  const period=new Date().toISOString().slice(0,7);
  let charge=await req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:30000})});assert.equal(charge.status,201);
  assert.equal((await req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:30000})})).status,409,'duplicate monthly charge rejected');
  let payment=await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:10000,method:'M-Pesa',reference:'QWERTY123'})});assert.equal(payment.status,201);assert.equal(payment.body.outstanding,20000,'partial payment updates balance');
+ assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:0.001,method:'M-Pesa',reference:'TOO-PRECISE'})})).status,400,'fractional amounts beyond cents rejected');
+ assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:100,method:'M-Pesa',reference:'BAD-DATE',paidAt:'2026-02-30'})})).status,400,'invalid calendar payment date rejected');
+ assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:100,method:'Bitcoin',reference:'BAD-METHOD'})})).status,400,'unknown payment methods rejected');
+ assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:100,method:'M-Pesa',reference:'X'})})).status,400,'too-short transaction references rejected');
  assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:1000,method:'M-Pesa',reference:'qwerty123'})})).status,409,'duplicate references are case-insensitive');
  assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:25000,method:'M-Pesa',reference:'OVERPAY1'})})).status,409,'overpayment is rejected');
  const summary=await req(TOKENS.a,'/api/rent/summary');assert.equal(summary.body.outstanding,20000);assert.equal(summary.body.totalCollected,10000);
