@@ -13,6 +13,10 @@ npm install && npm start   # http://localhost:3000
 - `GET /health` — health/readiness check (public)
 - `GET/POST /api/inboxes` — client conversations
 - `GET/POST /api/memories` — client/property/policy memory
+- `GET/POST /api/tenants` — agency-scoped tenant register linked to property inventory
+- `GET /api/rent/summary`, `GET/POST /api/rent/charges` — rent charges and arrears summary
+- `GET/POST /api/rent/payments` — append-only payment records with duplicate reference checks
+- `GET /api/rent/audit` — recent rent ledger audit events
 - `GET/POST/PATCH /api/properties` — listing inventory and status
 - `POST /api/properties/:id/verify` — explicit availability verification with a dated evidence note
 - `GET /api/approvals`, `POST /api/approvals/:id/decision` — human review queue
