@@ -72,20 +72,42 @@ function createStore(seed) {
     return tenantDBs.get('default');
   }
 
-  async function flush(tenantId) {
-    timers.delete(tenantId);
-    if (!pending.has(tenantId)) return;
-    pending.delete(tenantId);
-    const data = tenantDBs.get(tenantId);
-    if (!data) return;
-    try {
-      if (col) await col.updateOne({ _id: tenantKey(tenantId) }, { $set: { data, schemaVersion: 1, updatedAt: new Date() } }, { upsert: true });
-      else {
+  const writeQueues = new Map();
+  async function writeTenant(tenantId) {
+    const previous = writeQueues.get(tenantId) || Promise.resolve();
+    const task = previous.catch(() => {}).then(async () => {
+      const data = tenantDBs.get(tenantId);
+      if (!data) throw new Error('Tenant data is not loaded');
+      if (col) {
+        await col.updateOne({ _id: tenantKey(tenantId) }, { $set: { data, schemaVersion: 1, updatedAt: new Date() } }, { upsert: true });
+      } else {
         const file = fileFor(tenantId);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, JSON.stringify(data, null, 2), { mode: 0o600 });
       }
-    } catch (e) { console.error('[storage] tenant persistence failed:', e.message); lastError = 'persist_failed'; }
+      lastError = null;
+    });
+    writeQueues.set(tenantId, task);
+    try { await task; }
+    finally { if (writeQueues.get(tenantId) === task) writeQueues.delete(tenantId); }
+  }
+
+  async function flush(tenantId) {
+    timers.delete(tenantId);
+    if (!pending.has(tenantId)) return;
+    pending.delete(tenantId);
+    try { await writeTenant(tenantId); }
+    catch (e) { console.error('[storage] tenant persistence failed:', e.message); lastError = 'persist_failed'; }
+  }
+
+  async function persistCurrent() {
+    const ctx = contexts.getStore();
+    const tenantId = ctx && ctx.tenantId ? ctx.tenantId : 'default';
+    const timer = timers.get(tenantId);
+    if (timer) clearTimeout(timer);
+    timers.delete(tenantId);
+    pending.delete(tenantId);
+    await writeTenant(tenantId);
   }
 
   function save() {
@@ -108,7 +130,7 @@ function createStore(seed) {
     return ctx && ctx.data ? ctx.data : tenantDBs.get('default') || null;
   }
   return {
-    init, save, runWithTenant, getCurrentDB,
+    init, save, persistCurrent, runWithTenant, getCurrentDB,
     get DB() { return tenantDBs.get('default') || null; },
     name: () => driverName, lastError: () => lastError,
     flushAll: async () => { for (const id of [...pending]) await flush(id); },
