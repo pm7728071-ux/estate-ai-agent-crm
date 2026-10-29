@@ -29,3 +29,5 @@ jobs:
         run: node tests/property-verification.test.js
       - name: Tenant isolation regression test
         run: node tests/tenant-isolation.test.js
+      - name: Rent ledger regression test
+        run: node tests/rent-ledger.test.js

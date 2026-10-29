@@ -172,6 +172,7 @@ button{border-radius:10px;padding:10px 16px;background:linear-gradient(135deg,#e
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
       <span class="lbl">Action Logs</span><span class="count" id="c-log"></span>
     </a>
+    <a href="/rent-ledger.html" data-v="rent-ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h6M7 16h4"/></svg><span class="lbl">Rent Ledger</span></a>
   </nav>
   <div class="side-foot"><span class="dot"></span><span>Agent online · Nairobi</span><a href="/evidence.html" style="margin-left:auto;color:var(--dim);font-size:11px" title="Preserved demonstration dataset">Evidence</a></div>
 </aside>
@@ -487,6 +488,7 @@ $('#f-mem').onsubmit = async (e) => {
 
 const LABELS = { inboxes: 'Live Inboxes', properties: 'Property Inventory', approvals: 'Human Approvals', memories: 'Agent Memory Bank', logs: 'System Action Logs' };
 document.querySelectorAll('nav a').forEach(a => a.onclick = (e) => {
+  if (a.dataset.v === 'rent-ledger') return;
   e.preventDefault();
   document.querySelectorAll('nav a').forEach(x => x.classList.remove('active'));
   a.classList.add('active');

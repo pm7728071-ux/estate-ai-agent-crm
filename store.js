@@ -39,7 +39,7 @@ function createStore(seed) {
       try { data = JSON.parse(fs.readFileSync(fileFor(tenantId), 'utf8')); }
       catch { data = emptyState(); }
     }
-    for (const k of ['inboxes', 'memories', 'logs', 'properties', 'approvals']) if (!Array.isArray(data[k])) data[k] = [];
+    for (const k of ['inboxes', 'memories', 'logs', 'properties', 'approvals', 'tenants', 'rentCharges', 'rentPayments', 'rentAudit']) if (!Array.isArray(data[k])) data[k] = [];
     if (!data.threads || typeof data.threads !== 'object') data.threads = {};
     if (!data.holds || typeof data.holds !== 'object') data.holds = {};
     tenantDBs.set(tenantId, data);

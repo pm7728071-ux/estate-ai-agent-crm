@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "test:scenarios": "node tests/scenarios.js",
-    "test:tenant-isolation": "node tests/tenant-isolation.test.js"
+    "test:tenant-isolation": "node tests/tenant-isolation.test.js",
+    "test:rent-ledger": "node tests/rent-ledger.test.js"
   },
   "engines": {
     "node": ">=18"
