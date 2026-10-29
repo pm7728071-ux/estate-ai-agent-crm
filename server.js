@@ -159,8 +159,22 @@ app.post('/api/properties/:id/verify', (req, res) => {
 // ---------- tenant rent ledger and arrears ----------
 // Financial entries are append-only through this API: no update/delete routes are exposed.
 const rentId = prefix => prefix + '-' + require('crypto').randomUUID();
-const money = value => Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 100000000000 ? Math.round(Number(value) * 100) / 100 : null;
+// Accept only plain decimal amounts with at most two fractional digits. Integer cents
+// avoid silently rounding values such as 100.999 into a different financial amount.
+const money = value => {
+  const raw = typeof value === 'number' ? String(value) : String(value ?? '').trim();
+  if (!/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(raw)) return null;
+  const amount = Number(raw);
+  return Number.isFinite(amount) && amount > 0 && amount <= 100000000000 ? Math.round(amount * 100) / 100 : null;
+};
 const validPeriod = value => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || ''));
+const validDate = value => {
+  const raw = String(value || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
+  const date = new Date(raw + 'T00:00:00.000Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === raw;
+};
+const paymentMethods = new Set(['M-Pesa', 'Bank transfer', 'Cash', 'Card', 'Other']);
 const rentArrays = db => {
   for (const k of ['tenants', 'rentCharges', 'rentPayments', 'rentAudit']) if (!Array.isArray(db[k])) db[k] = [];
 };
@@ -221,8 +235,8 @@ app.post('/api/tenants', async (req, res) => {
   const name = String(b.name || '').trim().slice(0, 120);
   const propertyId = String(b.propertyId || '').trim();
   const monthlyRent = money(b.monthlyRent);
-  const dueDay = Number(b.dueDay || 1);
-  if (!name || !propertyId || !monthlyRent || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 28) {
+  const dueDay = Number(b.dueDay === undefined || b.dueDay === null || b.dueDay === '' ? 1 : b.dueDay);
+  if (!name || !propertyId || !monthlyRent || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 28 || (b.leaseStart !== undefined && b.leaseStart !== '' && !validDate(b.leaseStart))) {
     return res.status(400).json({ error: 'name, propertyId, positive monthlyRent, and dueDay from 1 to 28 are required' });
   }
   const property = (db.properties || []).find(p => p.id === propertyId);
@@ -233,7 +247,7 @@ app.post('/api/tenants', async (req, res) => {
     email: String(b.email || '').trim().slice(0, 160),
     phone: String(b.phone || '').trim().slice(0, 40),
     monthlyRent, currency: 'KES', dueDay,
-    leaseStart: /^\d{4}-\d{2}-\d{2}$/.test(String(b.leaseStart || '')) ? b.leaseStart : new Date().toISOString().slice(0, 10),
+    leaseStart: b.leaseStart ? b.leaseStart : new Date().toISOString().slice(0, 10),
     status: 'active', createdAt: new Date().toISOString()
   };
   db.tenants.unshift(tenant); auditRent(db, 'TENANT_CREATED', 'Tenant ' + tenant.id + ' created for property ' + property.id); save();
@@ -268,18 +282,18 @@ app.post('/api/rent/payments', async (req, res) => {
   const db = store.getCurrentDB(); rentArrays(db);
   const b = req.body || {}, tenantId = String(b.tenantId || ''), period = String(b.period || '');
   const amount = money(b.amount);
-  const reference = String(b.reference || '').trim().slice(0, 100);
+  const reference = String(b.reference || '').trim();
   const method = String(b.method || 'Other').trim().slice(0, 30);
   const tenant = db.tenants.find(t => t.id === tenantId && t.status === 'active');
   if (!tenant) return res.status(404).json({ error: 'Active tenant not found in this agency workspace' });
-  if (!validPeriod(period) || !amount || !reference) return res.status(400).json({ error: 'Valid period (YYYY-MM), positive amount, and transaction reference are required' });
+  if (!validPeriod(period) || !amount || reference.length < 3 || reference.length > 100 || (b.paidAt !== undefined && b.paidAt !== '' && !validDate(b.paidAt)) || !paymentMethods.has(String(b.method || 'Other').trim())) return res.status(400).json({ error: 'Valid period, amount with at most two decimal places, reference (3-100 characters), payment method, and valid payment date are required' });
   if (!db.rentCharges.some(c => c.tenantId === tenantId && c.period === period)) return res.status(409).json({ error: 'Create the rent charge for this tenant and period before recording payment' });
   const referenceKey = reference.toLowerCase();
   if (db.rentPayments.some(p => p.reference.toLowerCase() === referenceKey)) return res.status(409).json({ error: 'Transaction reference already recorded in this agency' });
   const balance = rentBalance(db, tenantId, period).balance;
-  if (amount > balance) return res.status(409).json({ error: 'Payment exceeds outstanding balance for this tenant and period', outstanding: balance });
+  if (Math.round(amount * 100) > Math.round(balance * 100)) return res.status(409).json({ error: 'Payment exceeds outstanding balance for this tenant and period', outstanding: balance });
   const snapshot = snapshotRent(db, ['rentPayments', 'rentAudit']);
-  const payment = { id: rentId('payment'), tenantId, tenantName: tenant.name, propertyId: tenant.propertyId, propertyTitle: tenant.propertyTitle, period, amount, currency: 'KES', method, reference, paidAt: /^\d{4}-\d{2}-\d{2}$/.test(String(b.paidAt || '')) ? b.paidAt : new Date().toISOString().slice(0, 10), createdAt: new Date().toISOString() };
+  const payment = { id: rentId('payment'), tenantId, tenantName: tenant.name, propertyId: tenant.propertyId, propertyTitle: tenant.propertyTitle, period, amount, currency: 'KES', method, reference, paidAt: b.paidAt ? b.paidAt : new Date().toISOString().slice(0, 10), createdAt: new Date().toISOString() };
   db.rentPayments.unshift(payment); auditRent(db, 'PAYMENT_RECORDED', 'Payment ' + payment.id + ' recorded for tenant ' + tenantId + ', reference ' + reference); save();
   if (!(await persistRentMutation(db, snapshot))) return res.status(503).json({ error: 'Payment was not saved durably; retry after storage is restored', code: 'STORAGE_WRITE_FAILED' });
   log('INFO', 'Rent payment recorded for ' + tenant.name + ' (' + period + ').');
