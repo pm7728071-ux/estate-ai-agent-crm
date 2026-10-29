@@ -41,15 +41,18 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
         });
       }
 
-      const approvalId = 'apr-' + crypto.randomUUID();
       DB.approvals = DB.approvals || [];
-      DB.approvals.unshift({
-        id: approvalId, requester: from, channel: channel || 'unknown',
-        action: 'Formal offer letter / external commitment', summary: msg.slice(0, 300),
-        status: 'pending', createdAt: new Date().toISOString(),
-        securityGate: gate.decision === 'DISABLED' ? 'LOCAL_APPROVAL_ONLY' : gate.decision,
-        aegisAuditId: gate.auditId || null, aegisRequestId: gate.requestId || null
-      });
+      const existingApproval = DB.approvals.find(a => a.idempotencyKey === requestKey);
+      const approvalId = existingApproval ? existingApproval.id : 'apr-' + crypto.randomUUID();
+      if (!existingApproval) {
+        DB.approvals.unshift({
+          id: approvalId, idempotencyKey: requestKey, requester: from, channel: channel || 'unknown',
+          action: 'Formal offer letter / external commitment', summary: msg.slice(0, 300),
+          status: 'pending', createdAt: new Date().toISOString(),
+          securityGate: gate.decision === 'DISABLED' ? 'LOCAL_APPROVAL_ONLY' : gate.decision,
+          aegisAuditId: gate.auditId || null, aegisRequestId: gate.requestId || null
+        });
+      }
       log('APPROVAL', 'Approval requested for ' + from + ' — formal offer / commitment held. Nothing sent.');
       actions.push({ type: 'APPROVAL_REQUESTED', approvalId, detail: 'Formal offer letter / commitment', securityGate: gate.decision });
       const note = gate.decision === 'PENDING_APPROVAL'
