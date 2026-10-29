@@ -35,3 +35,5 @@ jobs:
         run: node tests/rent-ledger.test.js
       - name: Aegis guard client test
         run: node tests/aegis-guard.test.js
+      - name: MongoDB transaction integration test (skips without isolated test DB)
+        run: npm run test:rent-ledger:mongo
