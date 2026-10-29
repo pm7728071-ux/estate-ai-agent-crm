@@ -156,6 +156,113 @@ app.post('/api/properties/:id/verify', (req, res) => {
   res.json({ ok: true, property: item });
 });
 
+// ---------- tenant rent ledger and arrears ----------
+// Financial entries are append-only through this API: no update/delete routes are exposed.
+const rentId = prefix => prefix + '-' + require('crypto').randomUUID();
+const money = value => Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 100000000000 ? Math.round(Number(value) * 100) / 100 : null;
+const validPeriod = value => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || ''));
+const rentArrays = db => {
+  for (const k of ['tenants', 'rentCharges', 'rentPayments', 'rentAudit']) if (!Array.isArray(db[k])) db[k] = [];
+};
+function rentBalance(db, tenantId, period) {
+  const charges = db.rentCharges.filter(c => c.tenantId === tenantId && (!period || c.period === period));
+  const payments = db.rentPayments.filter(p => p.tenantId === tenantId && (!period || p.period === period));
+  const charged = charges.reduce((s, c) => s + c.amount, 0);
+  const paid = payments.reduce((s, p) => s + p.amount, 0);
+  return { charged: Math.round(charged * 100) / 100, paid: Math.round(paid * 100) / 100, balance: Math.round((charged - paid) * 100) / 100 };
+}
+function auditRent(db, event, details) {
+  db.rentAudit.unshift({ id: rentId('raudit'), event, details: String(details).slice(0, 300), at: new Date().toISOString() });
+  if (db.rentAudit.length > 1000) db.rentAudit.length = 1000;
+}
+app.get('/api/tenants', (req, res) => {
+  const db = store.getCurrentDB(); rentArrays(db);
+  res.json(db.tenants.map(t => ({ ...t, ...rentBalance(db, t.id) })));
+});
+app.post('/api/tenants', (req, res) => {
+  const db = store.getCurrentDB(); rentArrays(db);
+  const b = req.body || {};
+  const name = String(b.name || '').trim().slice(0, 120);
+  const propertyId = String(b.propertyId || '').trim();
+  const monthlyRent = money(b.monthlyRent);
+  const dueDay = Number(b.dueDay || 1);
+  if (!name || !propertyId || !monthlyRent || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 28) {
+    return res.status(400).json({ error: 'name, propertyId, positive monthlyRent, and dueDay from 1 to 28 are required' });
+  }
+  const property = (db.properties || []).find(p => p.id === propertyId);
+  if (!property) return res.status(400).json({ error: 'Property not found in this agency workspace' });
+  const tenant = {
+    id: rentId('tenant'), name, propertyId, propertyTitle: property.title,
+    email: String(b.email || '').trim().slice(0, 160),
+    phone: String(b.phone || '').trim().slice(0, 40),
+    monthlyRent, currency: 'KES', dueDay,
+    leaseStart: /^\d{4}-\d{2}-\d{2}$/.test(String(b.leaseStart || '')) ? b.leaseStart : new Date().toISOString().slice(0, 10),
+    status: 'active', createdAt: new Date().toISOString()
+  };
+  db.tenants.unshift(tenant); save(); auditRent(db, 'TENANT_CREATED', 'Tenant ' + tenant.id + ' created for property ' + property.id); save();
+  log('INFO', 'Tenant created for property ' + property.title + '.');
+  res.status(201).json(tenant);
+});
+app.get('/api/rent/charges', (req, res) => {
+  const db = store.getCurrentDB(); rentArrays(db);
+  res.json(db.rentCharges.map(c => ({ ...c, balance: rentBalance(db, c.tenantId, c.period).balance })));
+});
+app.post('/api/rent/charges', (req, res) => {
+  const db = store.getCurrentDB(); rentArrays(db);
+  const b = req.body || {}, tenantId = String(b.tenantId || ''), period = String(b.period || '');
+  const amount = money(b.amount);
+  const tenant = db.tenants.find(t => t.id === tenantId && t.status === 'active');
+  if (!tenant) return res.status(404).json({ error: 'Active tenant not found in this agency workspace' });
+  if (!validPeriod(period) || !amount) return res.status(400).json({ error: 'Valid period (YYYY-MM) and positive amount are required' });
+  if (db.rentCharges.some(c => c.tenantId === tenantId && c.period === period)) return res.status(409).json({ error: 'A rent charge already exists for this tenant and period' });
+  const charge = { id: rentId('charge'), tenantId, tenantName: tenant.name, propertyId: tenant.propertyId, propertyTitle: tenant.propertyTitle, period, amount, currency: 'KES', dueDate: period + '-' + String(tenant.dueDay).padStart(2, '0'), createdAt: new Date().toISOString() };
+  db.rentCharges.unshift(charge); auditRent(db, 'CHARGE_CREATED', 'Charge ' + charge.id + ' for tenant ' + tenantId + ' period ' + period); save();
+  log('INFO', 'Rent charge recorded for ' + tenant.name + ' (' + period + ').');
+  res.status(201).json(charge);
+});
+app.get('/api/rent/payments', (req, res) => {
+  const db = store.getCurrentDB(); rentArrays(db);
+  res.json(db.rentPayments);
+});
+app.post('/api/rent/payments', (req, res) => {
+  const db = store.getCurrentDB(); rentArrays(db);
+  const b = req.body || {}, tenantId = String(b.tenantId || ''), period = String(b.period || '');
+  const amount = money(b.amount);
+  const reference = String(b.reference || '').trim().slice(0, 100);
+  const method = String(b.method || 'Other').trim().slice(0, 30);
+  const tenant = db.tenants.find(t => t.id === tenantId && t.status === 'active');
+  if (!tenant) return res.status(404).json({ error: 'Active tenant not found in this agency workspace' });
+  if (!validPeriod(period) || !amount || !reference) return res.status(400).json({ error: 'Valid period (YYYY-MM), positive amount, and transaction reference are required' });
+  if (!db.rentCharges.some(c => c.tenantId === tenantId && c.period === period)) return res.status(409).json({ error: 'Create the rent charge for this tenant and period before recording payment' });
+  const referenceKey = reference.toLowerCase();
+  if (db.rentPayments.some(p => p.reference.toLowerCase() === referenceKey)) return res.status(409).json({ error: 'Transaction reference already recorded in this agency' });
+  const balance = rentBalance(db, tenantId, period).balance;
+  if (amount > balance) return res.status(409).json({ error: 'Payment exceeds outstanding balance for this tenant and period', outstanding: balance });
+  const payment = { id: rentId('payment'), tenantId, tenantName: tenant.name, propertyId: tenant.propertyId, propertyTitle: tenant.propertyTitle, period, amount, currency: 'KES', method, reference, paidAt: /^\d{4}-\d{2}-\d{2}$/.test(String(b.paidAt || '')) ? b.paidAt : new Date().toISOString().slice(0, 10), createdAt: new Date().toISOString() };
+  db.rentPayments.unshift(payment); auditRent(db, 'PAYMENT_RECORDED', 'Payment ' + payment.id + ' recorded for tenant ' + tenantId + ', reference ' + reference); save();
+  log('INFO', 'Rent payment recorded for ' + tenant.name + ' (' + period + ').');
+  res.status(201).json({ ...payment, outstanding: Math.round((balance - amount) * 100) / 100 });
+});
+app.get('/api/rent/summary', (req, res) => {
+  const db = store.getCurrentDB(); rentArrays(db);
+  const today = new Date().toISOString().slice(0, 10);
+  const charges = db.rentCharges.map(c => {
+    const balance = rentBalance(db, c.tenantId, c.period).balance;
+    return { ...c, balance, paid: Math.round((c.amount - balance) * 100) / 100, overdue: balance > 0 && c.dueDate < today };
+  });
+  const outstanding = charges.reduce((s, c) => s + c.balance, 0);
+  res.json({
+    tenantCount: db.tenants.filter(t => t.status === 'active').length,
+    totalCharged: Math.round(charges.reduce((s, c) => s + c.amount, 0) * 100) / 100,
+    totalCollected: Math.round(db.rentPayments.reduce((s, p) => s + p.amount, 0) * 100) / 100,
+    outstanding: Math.round(outstanding * 100) / 100,
+    overdueBalance: Math.round(charges.filter(c => c.overdue).reduce((s, c) => s + c.balance, 0) * 100) / 100,
+    overdueCount: charges.filter(c => c.overdue).length,
+    charges
+  });
+});
+app.get('/api/rent/audit', (req, res) => { const db = store.getCurrentDB(); rentArrays(db); res.json(db.rentAudit.slice(0, 200)); });
+
 app.get('/api/approvals', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.approvals || []); });
 app.post('/api/approvals/:id/decision', (req, res) => {
   const DB = store.getCurrentDB();
