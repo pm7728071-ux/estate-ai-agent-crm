@@ -13,7 +13,8 @@ This document is an operational checklist, not a claim of certification or compl
 - [ ] Replace shared per-agency bearer keys with individual user identities, session expiry, roles, revocation/rotation, and agency-member management before handling real tenant personal data.
 - [x] Production refuses startup without MongoDB configuration or when MongoDB is unreachable rather than silently using JSON.
 - [x] Initial tenant-scoped MongoDB documents (`tenant:<id>`) and tenant-specific JSON development files; legacy `db` state is migrated only to the default tenant.
-- [ ] Replace whole-document writes with normalized tenant-scoped collections, concurrency-safe updates/transactions, indexes, and versioned migrations before multi-user production workloads.
+- [x] Add a transaction-backed rent-ledger repository with normalized MongoDB collections, agency-scoped unique indexes, conditional balance updates, majority write concern, and a validated one-time legacy ledger migration. This is code-level hardening, not a go-live approval.
+- [ ] Verify transaction support on the configured MongoDB replica set in staging; exercise duplicate-charge races, duplicate payment references, concurrent overpayment races, rollback, and migration failure recovery with integration tests.
 - [ ] Calendar-backed viewing availability and booking. Hardcoded listing recommendations and fabricated viewing slots have been removed; the agent now defers to a human when it cannot verify availability.
 - [ ] Enforce webhook signature validation in production and configure the Meta app secret. The current in-memory deduplication map is only a best-effort single-process safeguard; use durable idempotency keys for multiple instances/restarts.
 - [ ] Add approval persistence and a real operator workflow. An approval response must not imply a message, booking, payment, or offer was sent unless the external system confirms it.
@@ -42,6 +43,11 @@ This document is an operational checklist, not a claim of certification or compl
 - **Do not onboard real tenant personal data yet.** Wait until the tenant-isolation tests pass in CI, a staging deployment is verified, and per-user access, privacy/retention/deletion, audit, backups and recovery are reviewed.
 
 ## Rent ledger release notes
+
+- A new production path stores rent tenants, charges, payments, and audit events in separate MongoDB collections. Unique indexes enforce one charge per agency/tenant/month and one normalized payment reference per agency. Payment and charge/audit writes use MongoDB transactions; charge `paidCents` is conditionally updated to serialize concurrent payments.
+- Startup performs a one-time legacy migration per agency. Invalid legacy rows, duplicate charge periods/references, payments without charges, or overpaid charges intentionally block startup rather than silently importing inconsistent balances. Back up the database before first deployment and verify migration logs.
+- The transactional path requires a MongoDB replica set or sharded cluster that supports transactions. A standalone MongoDB server is not sufficient. The local/test JSON fallback is not a production financial store.
+- **Still not approved for real financial operations:** no M-Pesa/bank provider reconciliation, idempotency-key protocol for safe client retries, reversal/credit-note workflow, immutable external export, tested backup restoration, or independent security/accounting review has been completed. Do not claim payments are received unless independently verified against the provider/bank.
 
 - Initial tenant register, monthly rent charge, partial payment, arrears summary, and audit-event endpoints are implemented on `feature/rent-ledger-arrears`.
 - Payment records are append-only through the current API; duplicate transaction references and overpayments are rejected, and rent charge duplicates are rejected per tenant and period.
