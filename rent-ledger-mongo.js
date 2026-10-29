@@ -66,6 +66,63 @@ function createTransactionalRentLedger(getMongoDb, getMongoClient) {
     }, { session });
   }
 
+  async function migrateLegacy(agencyId, legacyData) {
+    const c = collections();
+    const migrations = c.client.db().collection('ledger_migrations');
+    const existing = await migrations.findOne({ _id: 'rent-ledger-v1:' + agencyId });
+    if (existing) return { migrated: false, alreadyMigrated: true };
+    const legacy = legacyData || {};
+    const tenants = Array.isArray(legacy.tenants) ? legacy.tenants : [];
+    const charges = Array.isArray(legacy.rentCharges) ? legacy.rentCharges : [];
+    const payments = Array.isArray(legacy.rentPayments) ? legacy.rentPayments : [];
+    const audits = Array.isArray(legacy.rentAudit) ? legacy.rentAudit : [];
+    const tenantIds = new Set(tenants.map(t => t.id));
+    const chargeKeys = new Set();
+    const paymentKeys = new Set();
+    const paidByCharge = new Map();
+    for (const ch of charges) {
+      if (!tenantIds.has(ch.tenantId) || !periodOK(ch.period) || !Number.isFinite(Number(ch.amount)) || Number(ch.amount) <= 0) throw new Error('Legacy rent ledger migration blocked: invalid charge or missing tenant in agency ' + agencyId);
+      const key = ch.tenantId + ':' + ch.period;
+      if (chargeKeys.has(key)) throw new Error('Legacy rent ledger migration blocked: duplicate tenant-period charge in agency ' + agencyId);
+      chargeKeys.add(key);
+      paidByCharge.set(key, 0);
+    }
+    for (const p of payments) {
+      if (!tenantIds.has(p.tenantId) || !periodOK(p.period) || !Number.isFinite(Number(p.amount)) || Number(p.amount) <= 0 || !String(p.reference || '').trim()) throw new Error('Legacy rent ledger migration blocked: invalid payment or missing tenant in agency ' + agencyId);
+      const key = String(p.reference).trim().toLocaleLowerCase('en-US');
+      if (paymentKeys.has(key)) throw new Error('Legacy rent ledger migration blocked: duplicate payment reference in agency ' + agencyId);
+      paymentKeys.add(key);
+      const chargeKey = p.tenantId + ':' + p.period;
+      if (!chargeKeys.has(chargeKey)) throw new Error('Legacy rent ledger migration blocked: payment has no matching rent charge in agency ' + agencyId);
+      paidByCharge.set(chargeKey, paidByCharge.get(chargeKey) + Math.round(Number(p.amount) * 100));
+    }
+    for (const ch of charges) {
+      const key = ch.tenantId + ':' + ch.period;
+      if (paidByCharge.get(key) > Math.round(Number(ch.amount) * 100)) throw new Error('Legacy rent ledger migration blocked: payments exceed charge in agency ' + agencyId);
+    }
+    await transaction(async (cols, session) => {
+      const marker = await migrations.findOne({ _id: 'rent-ledger-v1:' + agencyId }, { session });
+      if (marker) return;
+      if (tenants.length) await cols.tenants.insertMany(tenants.map(t => ({
+        ...t, agencyId, monthlyRentCents: Math.round(Number(t.monthlyRent) * 100)
+      })), { session, ordered: true });
+      if (charges.length) await cols.charges.insertMany(charges.map(ch => ({
+        ...ch, agencyId, amountCents: Math.round(Number(ch.amount) * 100),
+        paidCents: paidByCharge.get(ch.tenantId + ':' + ch.period) || 0
+      })), { session, ordered: true });
+      if (payments.length) await cols.payments.insertMany(payments.map(p => ({
+        ...p, agencyId, amountCents: Math.round(Number(p.amount) * 100),
+        referenceKey: String(p.reference).trim().toLocaleLowerCase('en-US')
+      })), { session, ordered: true });
+      if (audits.length) await cols.audit.insertMany(audits.map(a => ({ ...a, agencyId })), { session, ordered: true });
+      await migrations.insertOne({
+        _id: 'rent-ledger-v1:' + agencyId, agencyId, migratedAt: new Date().toISOString(),
+        tenantCount: tenants.length, chargeCount: charges.length, paymentCount: payments.length
+      }, { session });
+    });
+    return { migrated: true, tenantCount: tenants.length, chargeCount: charges.length, paymentCount: payments.length };
+  }
+
   async function listTenants(agencyId) {
     const c = collections();
     const tenants = await c.tenants.find({ agencyId, status: 'active' }).sort({ createdAt: -1 }).toArray();
@@ -180,7 +237,7 @@ function createTransactionalRentLedger(getMongoDb, getMongoClient) {
     return t ? { ...t, monthlyRent: dollars(t.monthlyRentCents) } : null;
   }
 
-  return { ensureIndexes, listTenants, createTenant, createCharge, createPayment, listCharges, listPayments, summary, listAudit, getTenant };
+  return { ensureIndexes, migrateLegacy, listTenants, createTenant, createCharge, createPayment, listCharges, listPayments, summary, listAudit, getTenant };
 }
 
 module.exports = { createTransactionalRentLedger, periodOK, dateOK, methods, dollars, cents };
