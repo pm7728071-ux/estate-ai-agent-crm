@@ -15,16 +15,18 @@ async function main(){try{
  let tenant=await req(TOKENS.a,'/api/tenants',{method:'POST',body:JSON.stringify({name:'Test Tenant',propertyId:property.body.id,monthlyRent:30000,dueDay:1,leaseStart:'2026-01-01'})});assert.equal(tenant.status,201);
  const period=new Date().toISOString().slice(0,7);
  let charge=await req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:30000})});assert.equal(charge.status,201);
- const duplicateChargeRace = await Promise.all([
-   req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:30000})}),
-   req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:30000})})
- ]);
- assert.equal(duplicateChargeRace.filter(x=>x.status===409).length,2,'duplicate monthly charge is rejected after the initial charge');
- assert.equal(duplicateChargeRace.filter(x=>x.status===201).length,0,'no concurrent duplicate charge is committed');
+ assert.equal((await req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:30000})})).status,409,'duplicate monthly charge rejected');
  let payment=await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:10000,method:'M-Pesa',reference:'QWERTY123'})});assert.equal(payment.status,201);assert.equal(payment.body.outstanding,20000,'partial payment updates balance');
  assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:1000,method:'M-Pesa',reference:'qwerty123'})})).status,409,'duplicate references are case-insensitive');
  assert.equal((await req(TOKENS.a,'/api/rent/payments',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period,amount:25000,method:'M-Pesa',reference:'OVERPAY1'})})).status,409,'overpayment is rejected');
  const summary=await req(TOKENS.a,'/api/rent/summary');assert.equal(summary.body.outstanding,20000);assert.equal(summary.body.totalCollected,10000);
+ const racePeriod = period === '2026-12' ? '2027-01' : '2026-12';
+ const concurrentCharges = await Promise.all([
+   req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period:racePeriod,amount:30000})}),
+   req(TOKENS.a,'/api/rent/charges',{method:'POST',body:JSON.stringify({tenantId:tenant.body.id,period:racePeriod,amount:30000})})
+ ]);
+ assert.equal(concurrentCharges.filter(x=>x.status===201).length,1,'exactly one concurrent duplicate charge is created');
+ assert.equal(concurrentCharges.filter(x=>x.status===409).length,1,'the concurrent duplicate charge is rejected');
  assert.equal((await req(TOKENS.b,'/api/tenants')).body.length,0,'other agency cannot read tenant');
  assert.equal((await req(TOKENS.b,'/api/rent/charges')).body.length,0,'other agency cannot read charges');
  assert.equal((await req(TOKENS.b,'/api/rent/payments')).body.length,0,'other agency cannot read payments');
