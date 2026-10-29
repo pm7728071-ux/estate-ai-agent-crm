@@ -27,7 +27,8 @@ function createTransactionalRentLedger(getMongoDb, getMongoClient) {
       tenants: db.collection('rent_tenants'),
       charges: db.collection('rent_charges'),
       payments: db.collection('rent_payments'),
-      audit: db.collection('rent_audit')
+      audit: db.collection('rent_audit'),
+      migrations: db.collection('ledger_migrations')
     };
   }
 
@@ -68,7 +69,7 @@ function createTransactionalRentLedger(getMongoDb, getMongoClient) {
 
   async function migrateLegacy(agencyId, legacyData) {
     const c = collections();
-    const migrations = c.client.db().collection('ledger_migrations');
+    const migrations = c.migrations;
     const existing = await migrations.findOne({ _id: 'rent-ledger-v1:' + agencyId });
     if (existing) return { migrated: false, alreadyMigrated: true };
     const legacy = legacyData || {};
