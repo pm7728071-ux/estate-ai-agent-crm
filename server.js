@@ -156,6 +156,86 @@ app.post('/api/properties/:id/verify', (req, res) => {
   res.json({ ok: true, property: item });
 });
 
+// Transactional financial repository. In production all rent ledger routes use normalized
+// MongoDB collections, unique indexes, and MongoDB transactions; legacy JSON-backed
+// handlers below remain available only for local/test development.
+const { createTransactionalRentLedger } = require('./rent-ledger-mongo.js');
+const transactionalLedger = createTransactionalRentLedger(() => store.getMongoDb(), () => store.getMongoClient());
+function ledgerError(res, error) {
+  if (error && error.code === 11000) return res.status(409).json({ error: 'A conflicting financial record already exists', code: 'DUPLICATE_FINANCIAL_RECORD' });
+  const status = Number.isInteger(error && error.status) ? error.status : 500;
+  if (status >= 500) console.error('[rent-ledger] transaction failed:', error && error.message);
+  return res.status(status).json({ error: status >= 500 ? 'Financial operation could not be committed; check the ledger before retrying' : error.message, code: error && error.code || 'LEDGER_OPERATION_FAILED' });
+}
+const ledgerCents = value => {
+  const amount = money(value);
+  return amount ? Math.round(amount * 100) : null;
+};
+app.get('/api/tenants', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try { res.json(await transactionalLedger.listTenants(req.tenantId)); } catch (e) { ledgerError(res, e); }
+});
+app.post('/api/tenants', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try {
+    const b = req.body || {}, name = String(b.name || '').trim().slice(0, 120);
+    const propertyId = String(b.propertyId || '').trim(), monthlyRentCents = ledgerCents(b.monthlyRent);
+    const dueDay = Number(b.dueDay === undefined || b.dueDay === null || b.dueDay === '' ? 1 : b.dueDay);
+    if (!name || !propertyId || !monthlyRentCents || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 28 || (b.leaseStart !== undefined && b.leaseStart !== '' && !validDate(b.leaseStart))) {
+      return res.status(400).json({ error: 'name, propertyId, positive monthlyRent, dueDay from 1 to 28, and a valid lease date are required' });
+    }
+    const db = store.getCurrentDB();
+    const property = (db.properties || []).find(p => p.id === propertyId);
+    const tenant = await transactionalLedger.createTenant(req.tenantId, {
+      name, email: String(b.email || '').trim().slice(0, 160), phone: String(b.phone || '').trim().slice(0, 40),
+      monthlyRentCents, dueDay, leaseStart: b.leaseStart || new Date().toISOString().slice(0, 10)
+    }, property);
+    res.status(201).json(tenant);
+  } catch (e) { ledgerError(res, e); }
+});
+app.get('/api/rent/charges', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try { res.json(await transactionalLedger.listCharges(req.tenantId)); } catch (e) { ledgerError(res, e); }
+});
+app.post('/api/rent/charges', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try {
+    const b = req.body || {}, tenantId = String(b.tenantId || ''), period = String(b.period || '');
+    const amountCents = ledgerCents(b.amount);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period) || !amountCents) return res.status(400).json({ error: 'Valid period (YYYY-MM) and positive amount are required' });
+    const tenant = await transactionalLedger.getTenant(req.tenantId, tenantId);
+    const charge = await transactionalLedger.createCharge(req.tenantId, { period, amountCents }, tenant);
+    res.status(201).json(charge);
+  } catch (e) { ledgerError(res, e); }
+});
+app.get('/api/rent/payments', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try { res.json(await transactionalLedger.listPayments(req.tenantId)); } catch (e) { ledgerError(res, e); }
+});
+app.post('/api/rent/payments', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try {
+    const b = req.body || {}, tenantId = String(b.tenantId || ''), period = String(b.period || '');
+    const amountCents = ledgerCents(b.amount), reference = String(b.reference || '').trim();
+    const method = String(b.method || 'Other').trim();
+    const paidAt = b.paidAt || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period) || !amountCents || reference.length < 3 || reference.length > 100 || !paymentMethods.has(method) || !validDate(paidAt)) {
+      return res.status(400).json({ error: 'Valid period, amount, reference, payment method, and calendar date are required' });
+    }
+    const tenant = await transactionalLedger.getTenant(req.tenantId, tenantId);
+    const payment = await transactionalLedger.createPayment(req.tenantId, { period, amountCents, reference, method, paidAt }, tenant);
+    res.status(201).json(payment);
+  } catch (e) { ledgerError(res, e); }
+});
+app.get('/api/rent/summary', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try { res.json(await transactionalLedger.summary(req.tenantId)); } catch (e) { ledgerError(res, e); }
+});
+app.get('/api/rent/audit', async (req, res, next) => {
+  if (store.name() !== 'mongo') return next();
+  try { res.json(await transactionalLedger.listAudit(req.tenantId)); } catch (e) { ledgerError(res, e); }
+});
+
 // ---------- tenant rent ledger and arrears ----------
 // Financial entries are append-only through this API: no update/delete routes are exposed.
 const rentId = prefix => prefix + '-' + require('crypto').randomUUID();
@@ -385,8 +465,9 @@ app.post('/api/admin/reset', resetGuard, (req, res) => {
 app.get('/api/logs', (req, res) => { const DB = store.getCurrentDB(); res.json(DB.logs.slice(0, 100)); });
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
-store.init().then(() => {
+store.init().then(async () => {
   DB = store.DB;
+  if (store.name() === 'mongo') await transactionalLedger.ensureIndexes();
   // One-time cleanup (v1): strip evaluation/demo fingerprints so live counters are real.
   try {
     DB.migrations = DB.migrations || {};
