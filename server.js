@@ -467,7 +467,23 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 store.init().then(async () => {
   DB = store.DB;
-  if (store.name() === 'mongo') await transactionalLedger.ensureIndexes();
+  if (store.name() === 'mongo') {
+    await transactionalLedger.ensureIndexes();
+    const legacyDocs = await store.getMongoDb().collection('tenant_state').find({ _id: /^tenant:/ }).toArray();
+    const seenAgencies = new Set();
+    for (const doc of legacyDocs) {
+      const agencyId = String(doc._id).slice('tenant:'.length);
+      seenAgencies.add(agencyId);
+      const result = await transactionalLedger.migrateLegacy(agencyId, doc.data || {});
+      if (result.migrated && (result.tenantCount || result.chargeCount || result.paymentCount)) {
+        console.log('[rent-ledger] migrated legacy records for agency', agencyId, result);
+      }
+    }
+    if (!seenAgencies.has('default')) {
+      const legacyDefault = await store.getMongoDb().collection('tenant_state').findOne({ _id: 'db' });
+      await transactionalLedger.migrateLegacy('default', legacyDefault && legacyDefault.data ? legacyDefault.data : {});
+    }
+  }
   // One-time cleanup (v1): strip evaluation/demo fingerprints so live counters are real.
   try {
     DB.migrations = DB.migrations || {};
