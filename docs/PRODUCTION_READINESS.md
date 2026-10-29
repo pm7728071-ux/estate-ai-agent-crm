@@ -45,6 +45,7 @@ This document is an operational checklist, not a claim of certification or compl
 
 - Initial tenant register, monthly rent charge, partial payment, arrears summary, and audit-event endpoints are implemented on `feature/rent-ledger-arrears`.
 - Payment records are append-only through the current API; duplicate transaction references and overpayments are rejected, and rent charge duplicates are rejected per tenant and period.
+- Input validation now rejects amounts with more than two decimal places, impossible calendar dates, unknown payment methods, and transaction references outside 3–100 characters; these checks reduce accidental data corruption but do not replace database-level financial constraints.
 - The rent ledger has not yet been independently executed against staging or reviewed for concurrent financial writes. Do not treat this as accounting-grade or payment-provider-integrated functionality until transaction-safe persistence, reversal workflows, reconciliation, backups, and security review are completed.
 
 ## P1 — reliability and customer value
