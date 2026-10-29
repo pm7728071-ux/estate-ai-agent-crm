@@ -9,6 +9,7 @@ function createAegisGuard(options = {}) {
   const baseUrl = String(options.baseUrl || process.env.AEGIS_GATEWAY_URL || 'https://aegis-agent-4u79.onrender.com').replace(/\/+$/, '');
   const apiKey = options.apiKey === undefined ? process.env.AEGIS_AGENT_API_KEY : options.apiKey;
   const timeoutMs = Number(options.timeoutMs || process.env.AEGIS_TIMEOUT_MS || 2500);
+  const fetchImpl = options.fetchImpl || global.fetch;
 
   return async function authorizeAction({ action, agencyId, resourceRef, idempotencyKey }) {
     if (!enabled) return { decision: 'DISABLED', reason: 'Aegis enforcement is not enabled.' };
@@ -23,7 +24,7 @@ function createAegisGuard(options = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(baseUrl + '/api/guard/action', {
+      const response = await fetchImpl(baseUrl + '/api/guard/action', {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + apiKey,
