@@ -175,11 +175,47 @@ function auditRent(db, event, details) {
   db.rentAudit.unshift({ id: rentId('raudit'), event, details: String(details).slice(0, 300), at: new Date().toISOString() });
   if (db.rentAudit.length > 1000) db.rentAudit.length = 1000;
 }
+const rentWriteTails = new Map();
+// Serialize financial writes per agency in this process so simultaneous requests cannot
+// both pass the same balance/reference checks before either is committed.
+app.use(['/api/tenants', '/api/rent/charges', '/api/rent/payments'], (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  const key = req.tenantId || 'default';
+  const previous = rentWriteTails.get(key) || Promise.resolve();
+  let release;
+  const current = new Promise(resolve => { release = resolve; });
+  rentWriteTails.set(key, current);
+  previous.then(() => {
+    let released = false;
+    const done = () => {
+      if (released) return;
+      released = true;
+      release();
+      if (rentWriteTails.get(key) === current) rentWriteTails.delete(key);
+    };
+    res.once('finish', done);
+    res.once('close', done);
+    next();
+  }).catch(() => { release(); res.status(500).json({ error: 'Could not serialize ledger write' }); });
+});
+function snapshotRent(db, keys) {
+  const snapshot = {};
+  for (const key of keys) snapshot[key] = JSON.parse(JSON.stringify(db[key] || []));
+  return snapshot;
+}
+async function persistRentMutation(db, snapshot) {
+  try { await store.persistCurrent(); return true; }
+  catch (error) {
+    for (const [key, value] of Object.entries(snapshot)) db[key] = value;
+    console.error('[rent-ledger] durable write failed:', error.message);
+    return false;
+  }
+}
 app.get('/api/tenants', (req, res) => {
   const db = store.getCurrentDB(); rentArrays(db);
   res.json(db.tenants.map(t => ({ ...t, ...rentBalance(db, t.id) })));
 });
-app.post('/api/tenants', (req, res) => {
+app.post('/api/tenants', async (req, res) => {
   const db = store.getCurrentDB(); rentArrays(db);
   const b = req.body || {};
   const name = String(b.name || '').trim().slice(0, 120);
@@ -191,6 +227,7 @@ app.post('/api/tenants', (req, res) => {
   }
   const property = (db.properties || []).find(p => p.id === propertyId);
   if (!property) return res.status(400).json({ error: 'Property not found in this agency workspace' });
+  const snapshot = snapshotRent(db, ['tenants', 'rentAudit']);
   const tenant = {
     id: rentId('tenant'), name, propertyId, propertyTitle: property.title,
     email: String(b.email || '').trim().slice(0, 160),
@@ -199,7 +236,8 @@ app.post('/api/tenants', (req, res) => {
     leaseStart: /^\d{4}-\d{2}-\d{2}$/.test(String(b.leaseStart || '')) ? b.leaseStart : new Date().toISOString().slice(0, 10),
     status: 'active', createdAt: new Date().toISOString()
   };
-  db.tenants.unshift(tenant); save(); auditRent(db, 'TENANT_CREATED', 'Tenant ' + tenant.id + ' created for property ' + property.id); save();
+  db.tenants.unshift(tenant); auditRent(db, 'TENANT_CREATED', 'Tenant ' + tenant.id + ' created for property ' + property.id); save();
+  if (!(await persistRentMutation(db, snapshot))) return res.status(503).json({ error: 'Tenant was not saved durably; retry after storage is restored', code: 'STORAGE_WRITE_FAILED' });
   log('INFO', 'Tenant created for property ' + property.title + '.');
   res.status(201).json(tenant);
 });
@@ -207,7 +245,7 @@ app.get('/api/rent/charges', (req, res) => {
   const db = store.getCurrentDB(); rentArrays(db);
   res.json(db.rentCharges.map(c => ({ ...c, balance: rentBalance(db, c.tenantId, c.period).balance })));
 });
-app.post('/api/rent/charges', (req, res) => {
+app.post('/api/rent/charges', async (req, res) => {
   const db = store.getCurrentDB(); rentArrays(db);
   const b = req.body || {}, tenantId = String(b.tenantId || ''), period = String(b.period || '');
   const amount = money(b.amount);
@@ -215,8 +253,10 @@ app.post('/api/rent/charges', (req, res) => {
   if (!tenant) return res.status(404).json({ error: 'Active tenant not found in this agency workspace' });
   if (!validPeriod(period) || !amount) return res.status(400).json({ error: 'Valid period (YYYY-MM) and positive amount are required' });
   if (db.rentCharges.some(c => c.tenantId === tenantId && c.period === period)) return res.status(409).json({ error: 'A rent charge already exists for this tenant and period' });
+  const snapshot = snapshotRent(db, ['rentCharges', 'rentAudit']);
   const charge = { id: rentId('charge'), tenantId, tenantName: tenant.name, propertyId: tenant.propertyId, propertyTitle: tenant.propertyTitle, period, amount, currency: 'KES', dueDate: period + '-' + String(tenant.dueDay).padStart(2, '0'), createdAt: new Date().toISOString() };
   db.rentCharges.unshift(charge); auditRent(db, 'CHARGE_CREATED', 'Charge ' + charge.id + ' for tenant ' + tenantId + ' period ' + period); save();
+  if (!(await persistRentMutation(db, snapshot))) return res.status(503).json({ error: 'Charge was not saved durably; retry after storage is restored', code: 'STORAGE_WRITE_FAILED' });
   log('INFO', 'Rent charge recorded for ' + tenant.name + ' (' + period + ').');
   res.status(201).json(charge);
 });
@@ -224,7 +264,7 @@ app.get('/api/rent/payments', (req, res) => {
   const db = store.getCurrentDB(); rentArrays(db);
   res.json(db.rentPayments);
 });
-app.post('/api/rent/payments', (req, res) => {
+app.post('/api/rent/payments', async (req, res) => {
   const db = store.getCurrentDB(); rentArrays(db);
   const b = req.body || {}, tenantId = String(b.tenantId || ''), period = String(b.period || '');
   const amount = money(b.amount);
@@ -238,8 +278,10 @@ app.post('/api/rent/payments', (req, res) => {
   if (db.rentPayments.some(p => p.reference.toLowerCase() === referenceKey)) return res.status(409).json({ error: 'Transaction reference already recorded in this agency' });
   const balance = rentBalance(db, tenantId, period).balance;
   if (amount > balance) return res.status(409).json({ error: 'Payment exceeds outstanding balance for this tenant and period', outstanding: balance });
+  const snapshot = snapshotRent(db, ['rentPayments', 'rentAudit']);
   const payment = { id: rentId('payment'), tenantId, tenantName: tenant.name, propertyId: tenant.propertyId, propertyTitle: tenant.propertyTitle, period, amount, currency: 'KES', method, reference, paidAt: /^\d{4}-\d{2}-\d{2}$/.test(String(b.paidAt || '')) ? b.paidAt : new Date().toISOString().slice(0, 10), createdAt: new Date().toISOString() };
   db.rentPayments.unshift(payment); auditRent(db, 'PAYMENT_RECORDED', 'Payment ' + payment.id + ' recorded for tenant ' + tenantId + ', reference ' + reference); save();
+  if (!(await persistRentMutation(db, snapshot))) return res.status(503).json({ error: 'Payment was not saved durably; retry after storage is restored', code: 'STORAGE_WRITE_FAILED' });
   log('INFO', 'Rent payment recorded for ' + tenant.name + ' (' + period + ').');
   res.status(201).json({ ...payment, outstanding: Math.round((balance - amount) * 100) / 100 });
 });
