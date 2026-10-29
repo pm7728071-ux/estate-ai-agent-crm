@@ -13,7 +13,8 @@ This document is an operational checklist, not a claim of certification or compl
 - [ ] Replace shared per-agency bearer keys with individual user identities, session expiry, roles, revocation/rotation, and agency-member management before handling real tenant personal data.
 - [x] Production refuses startup without MongoDB configuration or when MongoDB is unreachable rather than silently using JSON.
 - [x] Initial tenant-scoped MongoDB documents (`tenant:<id>`) and tenant-specific JSON development files; legacy `db` state is migrated only to the default tenant.
-- [ ] Replace whole-document writes with normalized tenant-scoped collections, concurrency-safe updates/transactions, indexes, and versioned migrations before multi-user production workloads.
+- [x] Add a transaction-backed rent-ledger repository with normalized MongoDB collections, agency-scoped unique indexes, conditional balance updates, majority write concern, and a validated one-time legacy ledger migration. This is code-level hardening, not a go-live approval.
+- [ ] Verify transaction support on the configured MongoDB replica set in staging; exercise duplicate-charge races, duplicate payment references, concurrent overpayment races, rollback, and migration failure recovery with integration tests.
 - [ ] Calendar-backed viewing availability and booking. Hardcoded listing recommendations and fabricated viewing slots have been removed; the agent now defers to a human when it cannot verify availability.
 - [ ] Enforce webhook signature validation in production and configure the Meta app secret. The current in-memory deduplication map is only a best-effort single-process safeguard; use durable idempotency keys for multiple instances/restarts.
 - [ ] Add approval persistence and a real operator workflow. An approval response must not imply a message, booking, payment, or offer was sent unless the external system confirms it.
@@ -21,6 +22,7 @@ This document is an operational checklist, not a claim of certification or compl
 - [ ] Complete per-principal rate limits, consistent validation for every route, safe error responses, and audit events that avoid unnecessary personal data.
 - [x] Initial GitHub Actions CI workflow for syntax checks, storage regression test, API token gate, explicit property verification, and approval-queue regression checks.
 - [ ] Add authenticated API/security tests, dependency auditing, backup/restore checks, and a staging deployment.
+- [ ] Configure a registered Aegis agent key in Render, enable `AEGIS_ENFORCE_ACTIONS=true`, and verify the connected action gate in staging before relying on it for consequential actions.
 - [ ] Establish privacy notices, retention/deletion controls, access procedures, incident response, and applicable Kenyan data-protection obligations before processing personal data.
 
 ## Implemented on `production-hardening` (not yet independently validated)
@@ -41,7 +43,19 @@ This document is an operational checklist, not a claim of certification or compl
 - Provision keys out-of-band, provide each agency only its own key, and rotate/revoke keys promptly. This first version uses shared agency-level keys, not per-user identity or role-based access control.
 - **Do not onboard real tenant personal data yet.** Wait until the tenant-isolation tests pass in CI, a staging deployment is verified, and per-user access, privacy/retention/deletion, audit, backups and recovery are reviewed.
 
+## Aegis action guard integration
+
+- The CRM includes an opt-in `aegis-guard.js` client. When enabled, it calls the Aegis `POST /api/guard/action` endpoint for consequential external commitments; network failures, missing credentials, malformed responses, and denials block the action. The current CRM still places commitments in a human approval queue and does not send messages, sign leases, book viewings, or move money automatically.
+- Configure Render secrets only after the Aegis action-guard endpoint is merged and deployed: `AEGIS_GATEWAY_URL=https://aegis-agent-4u79.onrender.com`, `AEGIS_AGENT_API_KEY=<registered Aegis agent key>`, and `AEGIS_ENFORCE_ACTIONS=true`. Never commit or paste the key into source files. Register the integration as its own Aegis agent and rotate/revoke its key if exposed.
+- The gate's `PENDING_APPROVAL` decision is a policy verdict, not an approval token for execution. Any future approval execution endpoint must re-check the policy and independently enforce authorization immediately before the external side effect.
+- Until the Aegis endpoint is merged/deployed and its credential is configured, the CRM integration is present in code but **not active**; the CRM's existing local approval gate remains the only control.
+
 ## Rent ledger release notes
+
+- A new production path stores rent tenants, charges, payments, and audit events in separate MongoDB collections. Unique indexes enforce one charge per agency/tenant/month and one normalized payment reference per agency. Payment and charge/audit writes use MongoDB transactions; charge `paidCents` is conditionally updated to serialize concurrent payments.
+- Startup performs a one-time legacy migration per agency. Invalid legacy rows, duplicate charge periods/references, payments without charges, or overpaid charges intentionally block startup rather than silently importing inconsistent balances. Back up the database before first deployment and verify migration logs.
+- The transactional path requires a MongoDB replica set or sharded cluster that supports transactions. A standalone MongoDB server is not sufficient. The local/test JSON fallback is not a production financial store.
+- **Still not approved for real financial operations:** no M-Pesa/bank provider reconciliation, idempotency-key protocol for safe client retries, reversal/credit-note workflow, immutable external export, tested backup restoration, or independent security/accounting review has been completed. Do not claim payments are received unless independently verified against the provider/bank.
 
 - Initial tenant register, monthly rent charge, partial payment, arrears summary, and audit-event endpoints are implemented on `feature/rent-ledger-arrears`.
 - Payment records are append-only through the current API; duplicate transaction references and overpayments are rejected, and rent charge duplicates are rejected per tenant and period.

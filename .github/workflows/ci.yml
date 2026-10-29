@@ -21,7 +21,9 @@ jobs:
         run: |
           node --check server.js
           node --check agent.js
+          node --check aegis-guard.js
           node --check store.js
+          node --check rent-ledger-mongo.js
           node --check whatsapp.js
       - name: Storage regression test
         run: node tests/storage.test.js
@@ -31,3 +33,7 @@ jobs:
         run: node tests/tenant-isolation.test.js
       - name: Rent ledger regression test
         run: node tests/rent-ledger.test.js
+      - name: Aegis guard client test
+        run: node tests/aegis-guard.test.js
+      - name: MongoDB transaction integration test (skips without isolated test DB)
+        run: npm run test:rent-ledger:mongo

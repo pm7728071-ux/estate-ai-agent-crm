@@ -2,11 +2,13 @@
  *  Deterministic: understand -> memory check -> act -> verify -> approval gate.
  */
 module.exports = function mountAgent({ app, getDB, save, log }) {
+  const { createAegisGuard } = require('./aegis-guard.js');
+  const aegisGuard = createAegisGuard();
   const reply = (res, body) => res.json(body);
   // Only records with an explicit availability status, verification note, and timestamp can be recommended.
   const props = () => (getDB().properties || []).filter(p => p.status === 'available' && p.verifiedAt && p.verificationNote);
 
-  app.post('/api/agent/message', (req, res) => {
+  app.post('/api/agent/message', async (req, res) => {
     const { channel, from, text } = req.body || {};
     if (!from || !text) return res.status(400).json({ error: 'from and text are required' });
     const DB = getDB();
@@ -24,12 +26,41 @@ module.exports = function mountAgent({ app, getDB, save, log }) {
 
     // 1) approval gate — consequential actions never leave without a human
     if (/(send|email|draft).*(offer|letter)|formal offer|commit to|sign the|pay the deposit|deposit of/i.test(t)) {
-      const approvalId = 'apr-' + require('crypto').randomUUID();
+      const crypto = require('crypto');
+      const requestKey = String(req.get('x-idempotency-key') || crypto.randomUUID()).slice(0, 120);
+      const gate = await aegisGuard({
+        action: 'crm.external_commitment',
+        agencyId: req.tenantId || 'default',
+        resourceRef: String(from) + '|' + requestKey,
+        idempotencyKey: requestKey
+      });
+      if (gate.decision === 'BLOCKED') {
+        log('AEGIS_BLOCKED', 'Aegis blocked or could not verify a consequential CRM action; no external action was performed.');
+        return out('This request is being held because the security gate blocked the action or could not verify it. No offer, message, payment, or commitment was sent. Please ask an administrator to review the security gate.', {
+          requiresApproval: true, aegisDecision: 'BLOCKED', securityReason: gate.reason, intent: 'aegis-blocked'
+        });
+      }
+
       DB.approvals = DB.approvals || [];
-      DB.approvals.unshift({ id: approvalId, requester: from, channel: channel || 'unknown', action: 'Formal offer letter / external commitment', summary: msg.slice(0, 300), status: 'pending', createdAt: new Date().toISOString() });
+      const existingApproval = DB.approvals.find(a => a.idempotencyKey === requestKey);
+      const approvalId = existingApproval ? existingApproval.id : 'apr-' + crypto.randomUUID();
+      if (!existingApproval) {
+        DB.approvals.unshift({
+          id: approvalId, idempotencyKey: requestKey, requester: from, channel: channel || 'unknown',
+          action: 'Formal offer letter / external commitment', summary: msg.slice(0, 300),
+          status: 'pending', createdAt: new Date().toISOString(),
+          securityGate: gate.decision === 'DISABLED' ? 'LOCAL_APPROVAL_ONLY' : gate.decision,
+          aegisAuditId: gate.auditId || null, aegisRequestId: gate.requestId || null
+        });
+      }
       log('APPROVAL', 'Approval requested for ' + from + ' — formal offer / commitment held. Nothing sent.');
-      actions.push({ type: 'APPROVAL_REQUESTED', approvalId, detail: 'Formal offer letter / commitment' });
-      return out('This request needs a human review before any offer or commitment is sent. I have saved it to the pending approvals queue; no external message or commitment has been made.', { requiresApproval: true, approvalId, intent: 'approval-gate' });
+      actions.push({ type: 'APPROVAL_REQUESTED', approvalId, detail: 'Formal offer letter / commitment', securityGate: gate.decision });
+      const note = gate.decision === 'PENDING_APPROVAL'
+        ? 'Aegis recorded the action and requires human approval.'
+        : 'The local approval queue is active; Aegis enforcement is not enabled.';
+      return out('This request needs a human review before any offer or commitment is sent. ' + note + ' I saved it to the pending approvals queue; no external message or commitment has been made.', {
+        requiresApproval: true, approvalId, aegisDecision: gate.decision, aegisAuditId: gate.auditId || null, intent: 'approval-gate'
+      });
     }
 
     // 2) landlord hold instruction
